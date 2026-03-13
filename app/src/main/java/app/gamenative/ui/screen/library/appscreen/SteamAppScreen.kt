@@ -390,33 +390,40 @@ class SteamAppScreen : BaseAppScreen() {
             }
         }
 
-        // Get last played text
-        val lastPlayedText = remember(isInstalled, gameId) {
-            if (isInstalled) {
-                val path = getAppDirPath(gameId)
-                val file = File(path)
-                if (file.exists()) {
-                    SteamUtils.fromSteamTime((file.lastModified() / 1000).toInt())
+        var lastPlayedText by remember { mutableStateOf<String?>(null) }
+        LaunchedEffect(gameId) {
+            val steamID = SteamService.userSteamId?.convertToUInt64()
+            if (steamID != null) {
+                val games = runCatching { SteamService.getOwnedGames(steamID) }.getOrDefault(emptyList())
+                val serverLastPlayed = games.firstOrNull { it.appId == gameId }?.rtimeLastPlayed
+                val fallbackLastPlayed = if ((serverLastPlayed ?: 0) <= 0) {
+                    SteamUtils.readLocalLastPlayed(context, steamID, gameId)
                 } else {
-                    context.getString(R.string.steam_never)
+                    null
                 }
+
+                val lastPlayed = serverLastPlayed?.takeIf { it > 0 } ?: fallbackLastPlayed?.takeIf { it > 0 }
+                lastPlayedText = lastPlayed?.let(SteamUtils::fromSteamTime) ?: context.getString(R.string.steam_never)
             } else {
-                context.getString(R.string.steam_never)
+                lastPlayedText = context.getString(R.string.steam_never)
             }
         }
 
         // Get playtime text
-        var playtimeText by remember { mutableStateOf("0 hrs") }
+        var playtimeText by remember { mutableStateOf<String?>(null) }
         LaunchedEffect(gameId) {
-            val steamID = SteamService.userSteamId?.accountID?.toLong()
+            val steamID = SteamService.userSteamId?.convertToUInt64()
             if (steamID != null) {
-                val games = SteamService.getOwnedGames(steamID)
-                val game = games.firstOrNull { it.appId == gameId }
-                playtimeText = if (game != null) {
-                    SteamUtils.formatPlayTime(game.playtimeForever) + " hrs"
+                val games = runCatching { SteamService.getOwnedGames(steamID) }.getOrDefault(emptyList())
+                val serverPlaytime = games.firstOrNull { it.appId == gameId }?.playtimeForever
+                val fallbackPlaytime = if ((serverPlaytime ?: 0) <= 0) {
+                    SteamUtils.readLocalPlaytimeMinutes(context, steamID, gameId)
                 } else {
-                    "0 hrs"
+                    null
                 }
+
+                val playtimeMinutes = serverPlaytime?.takeIf { it > 0 } ?: fallbackPlaytime?.takeIf { it > 0 }
+                playtimeText = playtimeMinutes?.let { SteamUtils.formatPlayTime(it) + " hrs" }
             }
         }
 

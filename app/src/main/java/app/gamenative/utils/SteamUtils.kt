@@ -99,6 +99,73 @@ object SteamUtils {
         }
     }
 
+    private fun readLocalAppValue(context: Context, steamId64: Long, appId: Int, key: String): Int? {
+        return try {
+            val steamPath = File(ImageFs.find(context).wineprefix, "drive_c/Program Files (x86)/Steam")
+            val localConfigFile = File(steamPath, "userdata/$steamId64/config/localconfig.vdf")
+            if (!localConfigFile.isFile) return null
+
+            localConfigFile.bufferedReader().useLines { lines ->
+                val appToken = "\"$appId\""
+                val valueToken = "\"$key\""
+                var inAppsSection = false
+                var waitingForAppBlock = false
+                var inTargetApp = false
+                var braceDepth = 0
+                var appBraceDepth = -1
+
+                for (rawLine in lines) {
+                    val line = rawLine.trim()
+                    if (line.isEmpty()) continue
+
+                    if (!inAppsSection && line == "\"apps\"") {
+                        inAppsSection = true
+                    } else if (inAppsSection && !inTargetApp && line == appToken) {
+                        waitingForAppBlock = true
+                    } else if (inTargetApp && line.startsWith(valueToken, ignoreCase = true)) {
+                        return@useLines line.split('"')
+                            .asSequence()
+                            .filter { it.isNotBlank() }
+                            .drop(1)
+                            .firstOrNull()
+                            ?.toIntOrNull()
+                    }
+
+                    val opens = line.count { it == '{' }
+                    val closes = line.count { it == '}' }
+
+                    if (waitingForAppBlock && opens > 0) {
+                        inTargetApp = true
+                        waitingForAppBlock = false
+                        appBraceDepth = braceDepth + opens - closes
+                    }
+
+                    braceDepth += opens - closes
+
+                    if (inAppsSection && braceDepth <= 0) {
+                        inAppsSection = false
+                    }
+
+                    if (inTargetApp && braceDepth < appBraceDepth) {
+                        inTargetApp = false
+                        appBraceDepth = -1
+                    }
+                }
+
+                null
+            }
+        } catch (e: Exception) {
+            Timber.w(e, "Failed to read local Steam app value for appId=$appId key=$key")
+            null
+        }
+    }
+
+    fun readLocalPlaytimeMinutes(context: Context, steamId64: Long, appId: Int): Int? =
+        readLocalAppValue(context, steamId64, appId, "Playtime")
+
+    fun readLocalLastPlayed(context: Context, steamId64: Long, appId: Int): Int? =
+        readLocalAppValue(context, steamId64, appId, "LastPlayed")
+
     // Steam strips all non-ASCII characters from usernames and passwords
     // source: https://github.com/steevp/UpdogFarmer/blob/8f2d185c7260bc2d2c92d66b81f565188f2c1a0e/app/src/main/java/com/steevsapps/idledaddy/LoginActivity.java#L166C9-L168C104
     // more: https://github.com/winauth/winauth/issues/368#issuecomment-224631002
