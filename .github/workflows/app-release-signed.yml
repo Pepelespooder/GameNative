@@ -1,14 +1,6 @@
 name: Android CI
 
 on:
-  push:
-    branches: [ "master" ]
-    paths-ignore:
-      - '**.md'
-      - '.gitignore'
-      - 'keyvalues/**'
-      - 'media/**'
-      - '.github/ISSUE_TEMPLATE/**'
   workflow_dispatch:
 
 jobs:
