@@ -61,3 +61,11 @@ app/keystores/*
 *.pyc
 __pycache__/
 resign.keystore
+/.codex-temp
+/.gradle-user-home
+/android-ndk-r29
+/in
+android-ndk-r29-linux.zip
+/.android-user-home
+/.android-home
+/.claude
