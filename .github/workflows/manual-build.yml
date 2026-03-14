@@ -32,10 +32,23 @@ jobs:
         EOF
 
     - name: Build with Gradle
-      run: ./gradlew :app:assembleRelease -x lintVitalRelease
+      run: ./gradlew :app:bundleRelease
+
+    - name: Install Android SDK Build Tools
+      run: |
+        SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+        if [ ! -x "$SDKMANAGER" ]; then
+          SDKMANAGER="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+        fi
+        yes | "$SDKMANAGER" --install "build-tools;34.0.0"
+
+    - name: Extract APK from Bundle
+      run: |
+        java -jar tools/bundletool-all-1.17.2.jar build-apks --bundle=app/build/outputs/bundle/release/app-release.aab --output=app-release.apks --mode=universal
+        unzip -o app-release.apks universal.apk
 
     - name: Upload APK
       uses: actions/upload-artifact@v4
       with:
         name: app-release
-        path: app/build/outputs/apk/release/app-release-unsigned.apk
+        path: universal.apk
