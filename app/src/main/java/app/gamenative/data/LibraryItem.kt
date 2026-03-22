@@ -33,6 +33,7 @@ data class LibraryItem(
     val compatibilityStatus: GameCompatibilityStatus? = null,
     val sizeBytes: Long = 0L,
     val isInstalled: Boolean = false,
+    val lastPlayed: Long = 0L,
 ) {
     val clientIconUrl: String
         get() = when (gameSource) {

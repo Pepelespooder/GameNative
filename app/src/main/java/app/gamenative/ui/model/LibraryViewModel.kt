@@ -444,6 +444,7 @@ class LibraryViewModel @Inject constructor(
                         heroImageUrl = item.getHeroUrl(),
                         isShared = (PrefManager.steamUserAccountId != 0 && !item.ownerAccountId.contains(PrefManager.steamUserAccountId)),
                         sizeBytes = totalSizeBytes,
+                        lastPlayed = item.lastPlayed,
                     ),
                     isInstalled = isInstalled,
                 )
@@ -642,9 +643,8 @@ class LibraryViewModel @Inject constructor(
 
                 SortOption.NAME_DESC -> compareByDescending { it.item.name.lowercase() }
 
-                SortOption.RECENTLY_PLAYED -> compareBy<LibraryEntry> { entry ->
-                    if (entry.isInstalled) 0 else 1
-                }.thenBy { it.item.name.lowercase() }
+                SortOption.RECENTLY_PLAYED -> compareByDescending<LibraryEntry> { it.item.lastPlayed }
+                    .thenBy { it.item.name.lowercase() }
 
                 SortOption.SIZE_SMALLEST -> compareBy<LibraryEntry> { it.item.sizeBytes }
                     .thenBy { it.item.name.lowercase() }

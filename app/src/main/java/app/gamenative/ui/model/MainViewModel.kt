@@ -76,6 +76,7 @@ class MainViewModel @Inject constructor(
     private val _offline = MutableStateFlow(false)
     val isOffline: StateFlow<Boolean> get() = _offline
 
+
     fun setOffline(value: Boolean) {
         _offline.value = value
     }
@@ -480,8 +481,13 @@ class MainViewModel @Inject constructor(
                 Timber.tag("Exit").i("Got game id: $gameId")
                 SteamService.notifyRunningProcesses()
 
-                // Check if this is a GOG or Epic game and sync cloud saves
+                // Update last played timestamp locally for the Steam game that just exited
                 val gameSource = ContainerUtils.extractGameSourceFromContainerId(appId)
+                if (gameSource == GameSource.STEAM) {
+                    SteamService.updateLastPlayed(gameId, System.currentTimeMillis() / 1000L)
+                }
+
+                // Check if this is a GOG or Epic game and sync cloud saves
                 if (gameSource == GameSource.GOG) {
                     Timber.tag("GOG").i("[Cloud Saves] GOG Game detected for $appId — syncing cloud saves after close")
                     try {
@@ -530,6 +536,12 @@ class MainViewModel @Inject constructor(
                         throw e
                     } catch (t: Throwable) {
                         Timber.tag("Steam").e(t, "[Cloud Saves] Exception during close app sync for $gameId")
+                    }
+                    // Pull updated playtime and last_played from Steam after the session ends
+                    try {
+                        SteamService.refreshOwnedGamesFromServer()
+                    } catch (t: Throwable) {
+                        Timber.tag("Steam").w(t, "Failed to refresh owned games after game exit")
                     }
                 }
 

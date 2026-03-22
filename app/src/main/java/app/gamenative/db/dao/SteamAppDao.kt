@@ -75,4 +75,10 @@ interface SteamAppDao {
 
     @Query("SELECT id FROM steam_app")
     suspend fun getAllAppIds(): List<Int>
+
+    @Query("UPDATE steam_app SET last_played = :lastPlayed WHERE id = :appId")
+    suspend fun updateLastPlayed(appId: Int, lastPlayed: Long)
+
+    @Query("UPDATE steam_app SET playtime_forever = :playtimeMinutes WHERE id = :appId")
+    suspend fun updatePlaytime(appId: Int, playtimeMinutes: Int)
 }

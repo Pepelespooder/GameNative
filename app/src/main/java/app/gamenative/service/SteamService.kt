@@ -623,6 +623,10 @@ class SteamService : Service(), IChallengeUrlChanged {
             return mainAppDlcIds
         }
 
+        suspend fun updateLastPlayed(appId: Int, lastPlayed: Long) {
+            instance?.appDao?.updateLastPlayed(appId, lastPlayed)
+        }
+
         /**
          * Refresh the owned games list by querying Steam, diffing with the local DB, and
          * queueing PICS requests for anything new so metadata gets populated.
@@ -639,6 +643,16 @@ class SteamService : Service(), IChallengeUrlChanged {
                 val remoteAppIds = ownedGames.map { it.appId }.filter { it > 0 }.toSet()
                 if (remoteAppIds.isEmpty()) {
                     return@runCatching 0
+                }
+
+                // Update last played timestamps and playtime for all owned games
+                ownedGames.forEach { game ->
+                    if (game.rtimeLastPlayed > 0) {
+                        service.appDao.updateLastPlayed(game.appId, game.rtimeLastPlayed.toLong())
+                    }
+                    if (game.playtimeForever > 0) {
+                        service.appDao.updatePlaytime(game.appId, game.playtimeForever)
+                    }
                 }
 
                 val localAppIds = service.appDao.getAllAppIds().toSet()

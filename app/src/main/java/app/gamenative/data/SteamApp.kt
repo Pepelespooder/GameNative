@@ -141,6 +141,11 @@ data class SteamApp(
 
     @ColumnInfo("ufs")
     val ufs: UFS = UFS(),
+
+    @ColumnInfo("last_played", defaultValue = "0")
+    val lastPlayed: Long = 0L,
+    @ColumnInfo("playtime_forever", defaultValue = "0")
+    val playtimeForever: Int = 0,
 ) {
     val logoUrl: String
         get() = "https://steamcdn-a.akamaihd.net/steamcommunity/public/images/apps/$id/$logoHash.jpg"
