@@ -2,6 +2,7 @@ package app.gamenative.ui.screen.library.appscreen
 
 import android.Manifest
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Environment
@@ -476,9 +477,8 @@ class SteamAppScreen : BaseAppScreen() {
     }
 
     override fun isDownloading(context: Context, libraryItem: LibraryItem): Boolean {
-        val gameId = libraryItem.gameId
-        return SteamService.getAppDownloadInfo(gameId) != null
-            && !SteamService.isAppInstalled(gameId)
+        // download job is removed on completion, so non-null means actively downloading
+        return SteamService.getAppDownloadInfo(libraryItem.gameId) != null
     }
 
     override fun getDownloadProgress(context: Context, libraryItem: LibraryItem): Float {
@@ -629,9 +629,7 @@ class SteamAppScreen : BaseAppScreen() {
         val downloadInfo = SteamService.getAppDownloadInfo(gameId)
 
         if (downloadInfo != null) {
-            if (!SteamService.isAppInstalled(gameId)) {
-                downloadInfo.cancel()
-            }
+            downloadInfo.cancel()
         } else {
             CoroutineScope(Dispatchers.IO).launch {
                 SteamService.downloadApp(gameId)
@@ -761,15 +759,27 @@ class SteamAppScreen : BaseAppScreen() {
         val appId = libraryItem.appId
         val appInfo = SteamService.getAppInfoOf(gameId) ?: return emptyList()
         val isDownloadInProgress = SteamService.getDownloadingAppInfoOf(gameId) != null
-
-        if (!isInstalled || isDownloadInProgress) {
-            return emptyList()
-        }
-
         val scope = rememberCoroutineScope()
 
-        // Steam-specific options (only when installed)
-        return listOf(
+        val options = mutableListOf<AppMenuOption>(
+            AppMenuOption(
+                AppOptionMenuType.BrowseOnlineSaves,
+                onClick = {
+                    val browserIntent = Intent(
+                        Intent.ACTION_VIEW,
+                        Uri.parse("https://store.steampowered.com/account/remotestorageapp/?appid=$gameId"),
+                    )
+                    context.startActivity(browserIntent)
+                },
+            ),
+        )
+
+        if (!isInstalled || isDownloadInProgress) {
+            return options
+        }
+
+        // Steam-specific options that only make sense once the game is installed.
+        options += listOf(
             AppMenuOption(
                 AppOptionMenuType.ResetDrm,
                 onClick = {
@@ -886,7 +896,11 @@ class SteamAppScreen : BaseAppScreen() {
                             val gpuName = GPUInformation.getRenderer(context)
 
                             val bestConfig = BestConfigService.fetchBestConfig(gameName, gpuName)
-                            if (bestConfig != null && bestConfig.matchType != "no_match") {
+                            if (bestConfig == null) {
+                                SnackbarManager.show(context.getString(R.string.best_config_fetch_failed))
+                            } else if (bestConfig.matchType == "no_match") {
+                                SnackbarManager.show(context.getString(R.string.best_config_no_config_available))
+                            } else {
                                 applyConfigForContainer(
                                     context,
                                     gameId,
@@ -895,8 +909,6 @@ class SteamAppScreen : BaseAppScreen() {
                                     bestConfig.matchType,
                                     scope,
                                 )
-                            } else {
-                                SnackbarManager.show(context.getString(R.string.best_config_no_config_available))
                             }
                         } catch (e: Exception) {
                             Timber.w(e, "Failed to apply known config: ${e.message}")
@@ -909,6 +921,8 @@ class SteamAppScreen : BaseAppScreen() {
                 }
             ),
         )
+
+        return options
     }
 
     override fun loadContainerData(context: Context, libraryItem: LibraryItem): ContainerData {
@@ -1062,7 +1076,7 @@ class SteamAppScreen : BaseAppScreen() {
                     Timber.i("There are ${depots.size} depots belonging to ${libraryItem.appId}")
                     val availableBytes = StorageUtils.getAvailableSpace(SteamService.defaultStoragePath)
                     val downloadBytes = depots.values.sumOf {
-                        it.manifests["public"]?.download ?: 0
+                        SteamUtils.getDownloadBytes(it.manifests["public"])
                     }
                     val installBytes = depots.values.sumOf { it.manifests["public"]?.size ?: 0 }
                     InstallSizeInfo(

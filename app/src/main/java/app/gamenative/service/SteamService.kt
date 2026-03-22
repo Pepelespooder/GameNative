@@ -9,7 +9,7 @@ import android.net.NetworkCapabilities
 import android.net.NetworkRequest
 import android.os.IBinder
 import android.util.Base64
-import android.widget.Toast
+import app.gamenative.ui.util.SnackbarManager
 import androidx.room.withTransaction
 import app.gamenative.BuildConfig
 import app.gamenative.NetworkMonitor
@@ -250,6 +250,7 @@ class SteamService : Service(), IChallengeUrlChanged {
     )
 
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private var reconnectJob: Job? = null
 
     private val onEndProcess: (AndroidEvent.EndProcess) -> Unit = {
         Companion.stop()
@@ -260,7 +261,6 @@ class SteamService : Service(), IChallengeUrlChanged {
 
     private val appTokens: ConcurrentHashMap<Int, Long> = ConcurrentHashMap()
 
-    // Connectivity management for Wi-Fi-only downloads
     private lateinit var connectivityManager: ConnectivityManager
     private lateinit var networkCallback: ConnectivityManager.NetworkCallback
 
@@ -312,11 +312,11 @@ class SteamService : Service(), IChallengeUrlChanged {
             cachedAchievementsAppId = null
         }
 
-        val isWifiConnected: Boolean get() = NetworkMonitor.isWifiConnected.value
+        val hasWifiOrEthernet: Boolean get() = NetworkMonitor.hasWifiOrEthernet.value
 
         /** @return true if download may proceed; false if blocked (notifies user) */
         private fun checkWifiOrNotify(): Boolean {
-            if (PrefManager.downloadOnWifiOnly && !isWifiConnected) {
+            if (PrefManager.downloadOnWifiOnly && !hasWifiOrEthernet) {
                 val svc = instance
                 if (svc != null) {
                     svc.notificationHelper.notify(svc.getString(R.string.download_no_wifi))
@@ -410,6 +410,22 @@ class SteamService : Service(), IChallengeUrlChanged {
 
         val externalAppInstallPath: String
             get() = Paths.get(PrefManager.externalStoragePath, "Steam", "steamapps", "common").pathString
+
+        // all install paths: internal + configured external + all mounted volumes
+        val allInstallPaths: List<String>
+            get() {
+                val paths = mutableListOf(internalAppInstallPath)
+                // only include configured external path if it's a real absolute path
+                if (PrefManager.externalStoragePath.isNotBlank()) {
+                    paths += externalAppInstallPath
+                }
+                for (volPath in DownloadService.externalVolumePaths) {
+                    if (volPath.isNotBlank()) {
+                        paths += Paths.get(volPath, "Steam", "steamapps", "common").pathString
+                    }
+                }
+                return paths.distinct()
+            }
 
         private val internalAppStagingPath: String
             get() {
@@ -650,8 +666,10 @@ class SteamService : Service(), IChallengeUrlChanged {
         fun filterForDownloadableDepots(depot: DepotInfo, has64Bit: Boolean, preferredLanguage: String, ownedDlc: Map<Int, DepotInfo>?): Boolean {
             if (depot.manifests.isEmpty() && depot.encryptedManifests.isNotEmpty())
                 return false
-            // 1. Has something to download
+            // 1. Has something to download (0-byte manifests = stale PICS data from interrupted fetch)
             if (depot.manifests.isEmpty() && !depot.sharedInstall)
+                return false
+            if (depot.manifests.isNotEmpty() && depot.manifests.values.all { it.size == 0L && it.download == 0L })
                 return false
             // 2. Supported OS
             if (!(depot.osList.contains(OS.windows) ||
@@ -756,27 +774,42 @@ class SteamService : Service(), IChallengeUrlChanged {
             return appName
         }
 
+        /**
+         * Resolve best matching directory: completed install > partial > null.
+         * Extracted for testability — called by [getAppDirPath].
+         */
+        fun resolveExistingAppDir(installPaths: List<String>, names: List<String>): String? {
+            var firstExisting: String? = null
+            for (basePath in installPaths) {
+                for (name in names) {
+                    if (name.isEmpty()) continue
+                    val path = Paths.get(basePath, name)
+                    if (Files.isDirectory(path)) {
+                        if (MarkerUtils.hasMarker(path.pathString, Marker.DOWNLOAD_COMPLETE_MARKER)) {
+                            return path.pathString
+                        }
+                        if (firstExisting == null) firstExisting = path.pathString
+                    }
+                }
+            }
+            return firstExisting
+        }
+
         fun getAppDirPath(gameId: Int): String {
             val info = getAppInfoOf(gameId)
             val appName = getAppDirName(info)
             val oldName = info?.name.orEmpty()
+            val names = if (oldName.isNotEmpty() && oldName != appName) listOf(appName, oldName) else listOf(appName)
 
-            // Internal first (legacy installs), external second
-            val internalPath = Paths.get(internalAppInstallPath, appName)
-            if (Files.exists(internalPath)) return internalPath.pathString
-            val internalOld = Paths.get(internalAppInstallPath, oldName)
-            if (oldName.isNotEmpty() && Files.exists(internalOld)) return internalOld.pathString
+            // prefer completed installs over partial/stale directories
+            val resolved = resolveExistingAppDir(allInstallPaths, names)
+            if (resolved != null) return resolved
 
-            val externalPath = Paths.get(externalAppInstallPath, appName)
-            if (Files.exists(externalPath)) return externalPath.pathString
-            val externalOld = Paths.get(externalAppInstallPath, oldName)
-            if (oldName.isNotEmpty() && Files.exists(externalOld)) return externalOld.pathString
-
-            // Nothing on disk yet – default to whatever location you want new installs to use
+            // nothing on disk yet — default to preferred install location
             if (PrefManager.useExternalStorage) {
-                return externalPath.pathString
+                return Paths.get(externalAppInstallPath, appName).pathString
             }
-            return internalPath.pathString
+            return Paths.get(internalAppInstallPath, appName).pathString
         }
 
         private fun isExecutable(flags: Any): Boolean = when (flags) {
@@ -995,8 +1028,9 @@ class SteamService : Service(), IChallengeUrlChanged {
         }
 
         fun deleteApp(appId: Int): Boolean {
-            // Remove any download-complete marker
-            MarkerUtils.removeMarker(getAppDirPath(appId), Marker.DOWNLOAD_COMPLETE_MARKER)
+            // snapshot path before marker removal (removing the marker changes resolution)
+            val appDirPath = getAppDirPath(appId)
+            MarkerUtils.removeMarker(appDirPath, Marker.DOWNLOAD_COMPLETE_MARKER)
             // Remove from DB
             with(instance!!) {
                 scope.launch {
@@ -1015,8 +1049,6 @@ class SteamService : Service(), IChallengeUrlChanged {
                     }
                 }
             }
-
-            val appDirPath = getAppDirPath(appId)
 
             return File(appDirPath).deleteRecursively()
         }
@@ -1822,6 +1854,10 @@ class SteamService : Service(), IChallengeUrlChanged {
                     MarkerUtils.removeMarker(appDirPath, Marker.STEAM_DLL_REPLACED)
                     MarkerUtils.removeMarker(appDirPath, Marker.STEAM_COLDCLIENT_USED)
                 }
+
+                // clean up DB record BEFORE notifying UI to avoid stale "Resume" button
+                instance?.downloadingAppInfoDao?.deleteApp(downloadInfo.gameId)
+
                 PluviaApp.events.emit(AndroidEvent.LibraryInstallStatusChanged(downloadInfo.gameId))
 
                 // Clear persisted bytes file on successful completion
@@ -1862,13 +1898,7 @@ class SteamService : Service(), IChallengeUrlChanged {
 
                 removeDownloadJob(downloadInfo.gameId)
                 instance?.let { service ->
-                    service.scope.launch(Dispatchers.Main) {
-                        Toast.makeText(
-                            service.applicationContext,
-                            service.getString(R.string.download_failed_try_again),
-                            Toast.LENGTH_LONG,
-                        ).show()
-                    }
+                    SnackbarManager.show(service.getString(R.string.download_failed_try_again))
                 }
             }
 
@@ -2487,7 +2517,7 @@ class SteamService : Service(), IChallengeUrlChanged {
         }
 
         private fun clearUserData(clearCloudSyncState: Boolean = false) {
-            PrefManager.clearPreferences()
+            PrefManager.clearSteamSessionPreferences()
 
             clearDatabase(clearCloudSyncState = clearCloudSyncState)
         }
@@ -2678,30 +2708,38 @@ class SteamService : Service(), IChallengeUrlChanged {
         }
 
         suspend fun syncAchievementsFromGoldberg(context: Context, appId: Int) {
-            val gseSaveDir = getGseSaveDirs(context, appId).firstOrNull { it.isDirectory }
-            if (gseSaveDir == null) {
+            val gseSaveDirs = getGseSaveDirs(context, appId).filter { it.isDirectory }
+            if (gseSaveDirs.isEmpty()) {
                 Timber.d("No GSE save directory found for appId=$appId")
                 return
             }
 
             val unlockedNames = mutableSetOf<String>()
-            val goldbergAchFile = File(gseSaveDir, "achievements.json")
-            if (goldbergAchFile.exists()) {
-                try {
-                    val json = JSONObject(goldbergAchFile.readText(Charsets.UTF_8))
-                    for (name in json.keys()) {
-                        val entry = json.optJSONObject(name) ?: continue
-                        if (entry.optBoolean("earned", false)) {
-                            unlockedNames.add(name)
+            var gseStatsDir: File? = null
+
+            for (gseSaveDir in gseSaveDirs) {
+                val goldbergAchFile = File(gseSaveDir, "achievements.json")
+                if (goldbergAchFile.exists()) {
+                    try {
+                        val json = JSONObject(goldbergAchFile.readText(Charsets.UTF_8))
+                        for (name in json.keys()) {
+                            val entry = json.optJSONObject(name) ?: continue
+                            if (entry.optBoolean("earned", false)) {
+                                unlockedNames.add(name)
+                            }
                         }
+                    } catch (e: Exception) {
+                        Timber.e(e, "Failed to parse Goldberg achievements.json in ${gseSaveDir.absolutePath} for appId=$appId")
                     }
-                } catch (e: Exception) {
-                    Timber.e(e, "Failed to parse Goldberg achievements.json for appId=$appId")
+                }
+
+                val statsDir = File(gseSaveDir, "stats")
+                if (gseStatsDir == null && statsDir.isDirectory && (statsDir.listFiles()?.isNotEmpty() == true)) {
+                    gseStatsDir = statsDir
                 }
             }
 
-            val gseStatsDir = File(gseSaveDir, "stats")
-            val hasStats = gseStatsDir.isDirectory && (gseStatsDir.listFiles()?.isNotEmpty() == true)
+            val hasStats = gseStatsDir != null
 
             if (unlockedNames.isEmpty() && !hasStats) {
                 Timber.d("No earned achievements or stats found in Goldberg output for appId=$appId")
@@ -2715,7 +2753,7 @@ class SteamService : Service(), IChallengeUrlChanged {
             }
 
             Timber.i("Found ${unlockedNames.size} earned achievements and ${if (hasStats) "stats" else "no stats"} for appId=$appId, syncing to Steam")
-            val result = storeAchievementUnlocks(appId, configDirectory, unlockedNames, gseStatsDir)
+            val result = storeAchievementUnlocks(appId, configDirectory, unlockedNames, gseStatsDir ?: gseSaveDirs.first().resolve("stats"))
             result.onSuccess {
                 Timber.i("Successfully synced achievements and stats to Steam for appId=$appId")
             }.onFailure { e ->
@@ -2867,15 +2905,39 @@ class SteamService : Service(), IChallengeUrlChanged {
 
         PluviaApp.events.on<AndroidEvent.EndProcess, Unit>(onEndProcess)
 
+        // clear stale download records (completed games) but keep interrupted ones (preserves DLC selection)
+        scope.launch {
+            for (record in downloadingAppInfoDao.getAll()) {
+                if (isAppInstalled(record.appId)) {
+                    downloadingAppInfoDao.deleteApp(record.appId)
+                }
+            }
+        }
+
         notificationHelper = NotificationHelper(applicationContext)
-        // pause downloads when WiFi/Ethernet is lost
+
+        // pause downloads when WiFi/Ethernet connectivity changes
         connectivityManager = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
         networkCallback = object : ConnectivityManager.NetworkCallback() {
-            override fun onLost(network: Network) {
-                // only pause if no WiFi/LAN remains (avoids false pause on multi-network)
-                if (PrefManager.downloadOnWifiOnly && !isWifiConnected) {
+            override fun onLost(network: Network) = checkAndPauseDownloads()
+            override fun onCapabilitiesChanged(network: Network, caps: NetworkCapabilities) = checkAndPauseDownloads()
+
+            // query ConnectivityManager directly (not NetworkMonitor) to avoid
+            // callback ordering race between our two separate registrations.
+            // no VPN exclusion needed here — activeNetwork is always fresh
+            // (stale-VPN guard is only needed in NetworkMonitor's multi-network tracking)
+            private fun hasActiveWifiOrEthernet(): Boolean {
+                val activeNet = connectivityManager.activeNetwork ?: return false
+                val caps = connectivityManager.getNetworkCapabilities(activeNet) ?: return false
+                return caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) ||
+                    caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)
+            }
+
+            // no transition guard needed — if WiFi already down, downloadJobs is empty (no-op)
+            private fun checkAndPauseDownloads() {
+                if (PrefManager.downloadOnWifiOnly && !hasActiveWifiOrEthernet()) {
                     for ((appId, info) in downloadJobs.entries.toList()) {
-                        Timber.d("Cancelling job")
+                        Timber.d("Pausing download for $appId — WiFi/Ethernet lost")
                         info.cancel()
                         PluviaApp.events.emit(AndroidEvent.DownloadPausedDueToConnectivity(appId))
                         removeDownloadJob(appId)
@@ -2885,8 +2947,7 @@ class SteamService : Service(), IChallengeUrlChanged {
             }
         }
         val networkRequest = NetworkRequest.Builder()
-            .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
-            .addTransportType(NetworkCapabilities.TRANSPORT_ETHERNET)
+            .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
             .build()
         connectivityManager.registerNetworkCallback(networkRequest, networkCallback)
 
@@ -2917,9 +2978,10 @@ class SteamService : Service(), IChallengeUrlChanged {
                 it.withConnectionTimeout(60000L)
                 it.withHttpClient(
                     OkHttpClient.Builder()
-                        .connectTimeout(10, TimeUnit.SECONDS) // Time to establish connection
-                        .readTimeout(60, TimeUnit.SECONDS) // Max inactivity between reads
-                        .writeTimeout(30, TimeUnit.SECONDS) // Time for writes
+                        .connectTimeout(10, TimeUnit.SECONDS)
+                        .readTimeout(60, TimeUnit.SECONDS)
+                        .writeTimeout(30, TimeUnit.SECONDS)
+                        .pingInterval(15, TimeUnit.SECONDS) // keep WebSocket alive during idle
                         .build(),
                 )
             }
@@ -2999,7 +3061,6 @@ class SteamService : Service(), IChallengeUrlChanged {
         stopForeground(STOP_FOREGROUND_REMOVE)
         notificationHelper.cancel()
 
-        // Unregister Wi-Fi connectivity callback
         connectivityManager.unregisterNetworkCallback(networkCallback)
 
         scope.launch { stop() }
@@ -3074,6 +3135,7 @@ class SteamService : Service(), IChallengeUrlChanged {
         _unifiedFriends?.close()
         _unifiedFriends = null
 
+        reconnectJob?.cancel()
         isStopping = false
         retryAttempt = 0
 
@@ -3088,7 +3150,7 @@ class SteamService : Service(), IChallengeUrlChanged {
 
         isConnected = false
 
-        val event = SteamEvent.Disconnected
+        val event = SteamEvent.Disconnected(isTerminal = false)
         PluviaApp.events.emit(event)
 
         steamClient!!.disconnect()
@@ -3099,6 +3161,7 @@ class SteamService : Service(), IChallengeUrlChanged {
     private fun onConnected(callback: ConnectedCallback) {
         Timber.i("Connected to Steam")
 
+        reconnectJob?.cancel()
         retryAttempt = 0
         isConnected = true
 
@@ -3125,16 +3188,20 @@ class SteamService : Service(), IChallengeUrlChanged {
 
         if (!isStopping && retryAttempt < MAX_RETRY_ATTEMPTS) {
             retryAttempt++
+            val backoffMs = (1000L * minOf(1 shl (retryAttempt - 1), 60)).coerceAtMost(60_000L)
 
-            Timber.w("Attempting to reconnect (retry $retryAttempt)")
+            Timber.w("Attempting to reconnect (retry $retryAttempt) after ${backoffMs}ms")
 
-            // isLoggingOut = false
             val event = SteamEvent.RemotelyDisconnected
             PluviaApp.events.emit(event)
 
-            connectToSteam()
+            reconnectJob = scope.launch {
+                delay(backoffMs)
+                if (isRunning && !isStopping) connectToSteam()
+            }
         } else {
-            val event = SteamEvent.Disconnected
+            // only terminal when retries exhausted, not when user/system stopped the service
+            val event = SteamEvent.Disconnected(isTerminal = !isStopping)
             PluviaApp.events.emit(event)
 
             clearValues()

@@ -5,6 +5,7 @@ import android.content.Context
 import android.provider.Settings
 import app.gamenative.PrefManager
 import app.gamenative.data.DepotInfo
+import app.gamenative.data.ManifestInfo
 import app.gamenative.data.SteamApp
 import app.gamenative.enums.Marker
 import app.gamenative.enums.SpecialGameSaveMapping
@@ -33,44 +34,21 @@ import kotlin.io.path.absolutePathString
 import kotlin.io.path.name
 import timber.log.Timber
 import okhttp3.*
-import okhttp3.HttpUrl.Companion.toHttpUrl
-import okhttp3.dnsoverhttps.DnsOverHttps
 import org.json.JSONObject
-import java.net.InetAddress
 import java.net.URLEncoder
 import java.util.concurrent.TimeUnit
 
 object SteamUtils {
 
-    private val bootstrapClient = OkHttpClient.Builder()
-        .protocols(listOf(Protocol.HTTP_2, Protocol.HTTP_1_1))
-        .build()
-
-    private val doh: DnsOverHttps = DnsOverHttps.Builder()
-        .client(bootstrapClient)
-        .url("https://dns.google/dns-query".toHttpUrl())
-        .bootstrapDnsHosts(
-            InetAddress.getByName("8.8.8.8"),
-            InetAddress.getByName("8.8.4.4"),
-        )
-        .build()
-
-    private val fallbackDns = object : Dns {
-        override fun lookup(hostname: String): List<InetAddress> {
-            return try {
-                doh.lookup(hostname)
-            } catch (e: Exception) {
-                Timber.w(e, "DoH lookup failed for $hostname, falling back to system DNS")
-                Dns.SYSTEM.lookup(hostname)
-            }
-        }
+    fun getDownloadBytes(manifest: ManifestInfo?): Long {
+        if (manifest == null) return 0L
+        return if (manifest.download > 0L) manifest.download else manifest.size
     }
 
-    internal val http = OkHttpClient.Builder()
-        .dns(fallbackDns)
+    internal val http = Net.http.newBuilder()
         .readTimeout(5, TimeUnit.MINUTES)
+        .callTimeout(0, TimeUnit.MILLISECONDS)
         .protocols(listOf(Protocol.HTTP_1_1))
-        .retryOnConnectionFailure(true)
         .build()
 
     private val sfd by lazy {
@@ -428,6 +406,7 @@ object SteamUtils {
         val gameName = getAppDirName(getAppInfoOf(steamAppId))
         val executablePath = container.executablePath.replace("/", "\\")
         val exePath = "steamapps\\common\\$gameName\\$executablePath"
+        val exeRunDir = "steamapps\\common\\$gameName"
         val exeCommandLine = container.execArgs
         val iniFile = File(container.getRootDir(), ".wine/drive_c/Program Files (x86)/Steam/ColdClientLoader.ini")
         iniFile.parentFile?.mkdirs()
@@ -451,7 +430,7 @@ object SteamUtils {
                 [SteamClient]
 
                 Exe=$exePath
-                ExeRunDir=
+                ExeRunDir=$exeRunDir
                 ExeCommandLine=$exeCommandLine
                 AppId=$steamAppId
 
@@ -829,10 +808,35 @@ object SteamUtils {
         MarkerUtils.addMarker(appDirPath, Marker.STEAM_DLL_RESTORED)
     }
 
+    fun findSteamApiDllRootFile(file: File, depth: Int): File? {
+        if (depth < 0) return null
+        val (files, directories) = file.walkTopDown().maxDepth(1).partition { it.isFile }
+
+        val steamApi = files.firstOrNull {
+            it.toPath().name.startsWith("steam_api", true)
+            && (
+                it.toPath().name.endsWith(".dll", true)
+                || it.toPath().name.endsWith(".dll.orig", true)
+            )
+        }
+
+        if (steamApi != null)
+            return steamApi.parentFile
+
+        return directories.filter { it != file }.firstNotNullOfOrNull { findSteamApiDllRootFile(it, depth - 1) }
+    }
+
     fun putBackSteamDlls(appDirPath: String) {
         val rootPath = Paths.get(appDirPath)
 
-        rootPath.toFile().walkTopDown().maxDepth(10).forEach { file ->
+        val dllRootFile = findSteamApiDllRootFile(rootPath.toFile(), 10)
+
+        if (dllRootFile == null) {
+            Timber.w("Failed to find steam_api.dll/steam_api64.dll on a Steam game")
+            return
+        }
+
+        dllRootFile.walkTopDown().maxDepth(1).forEach { file ->
             val path = file.toPath()
             if (!file.isFile || !path.name.startsWith("steam_api", ignoreCase = true) || !path.name.endsWith(".orig", ignoreCase = true)) return@forEach
 
@@ -1408,14 +1412,23 @@ object SteamUtils {
     }
 
     fun generateAchievementsFile(dllPath: Path, appId: String) {
+        if (!SteamService.isLoggedIn) {
+            Timber.w("Skipping achievements generation for $appId — Steam not logged in")
+            return
+        }
+
         val steamAppId = ContainerUtils.extractGameIdFromContainerId(appId)
         val settingsDir = dllPath.parent.resolve("steam_settings")
         if (Files.notExists(settingsDir)) {
             Files.createDirectories(settingsDir)
         }
 
-        runBlocking {
-            SteamService.generateAchievements(steamAppId, settingsDir.absolutePathString())
+        try {
+            runBlocking {
+                SteamService.generateAchievements(steamAppId, settingsDir.absolutePathString())
+            }
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to generate achievements for $appId")
         }
     }
 }
