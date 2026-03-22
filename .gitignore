@@ -69,3 +69,5 @@ android-ndk-r29-linux.zip
 /.android-user-home
 /.android-home
 /.claude
+/android-ndk-windows/android-ndk-r27d
+/node_modules
