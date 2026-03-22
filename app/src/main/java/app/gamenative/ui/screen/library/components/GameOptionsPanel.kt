@@ -340,6 +340,7 @@ private fun getIconForOption(type: AppOptionMenuType): ImageVector {
         AppOptionMenuType.ImportConfig -> Icons.Default.ArrowDownward
         AppOptionMenuType.ExportConfig -> Icons.Default.ArrowUpward
         AppOptionMenuType.ManageGameContent -> Icons.Default.Apps
+        AppOptionMenuType.SelectBranch -> Icons.Default.AccountTree
     }
 }
 
@@ -365,6 +366,7 @@ private fun groupOptions(options: List<AppMenuOption>): Map<OptionCategory, List
             AppOptionMenuType.Update,
             AppOptionMenuType.MoveToExternalStorage,
             AppOptionMenuType.MoveToInternalStorage,
+            AppOptionMenuType.SelectBranch,
             -> gameManagement.add(option)
 
             // Container Settings
