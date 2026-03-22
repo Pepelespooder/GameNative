@@ -51,6 +51,10 @@ import com.winlator.fexcore.FEXCoreManager
 import com.winlator.xenvironment.ImageFsInstaller
 import java.nio.file.Paths
 import kotlin.io.path.pathString
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccountTree
+import androidx.compose.runtime.rememberCoroutineScope
+import app.gamenative.ui.component.dialog.SingleChoiceDialog
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -236,6 +240,19 @@ private fun buildNotEnoughSpaceState(context: Context, info: InstallSizeInfo): M
  */
 class SteamAppScreen : BaseAppScreen() {
     companion object {
+        // Shared state for branch dialog - list of appIds that should show the dialog
+        private val branchDialogAppIds = mutableStateListOf<String>()
+
+        fun showBranchDialog(appId: String) {
+            if (!branchDialogAppIds.contains(appId)) branchDialogAppIds.add(appId)
+        }
+
+        fun hideBranchDialog(appId: String) {
+            branchDialogAppIds.remove(appId)
+        }
+
+        fun shouldShowBranchDialog(appId: String): Boolean = branchDialogAppIds.contains(appId)
+
         // Shared state for uninstall dialog - list of appIds that should show the dialog
         private val uninstallDialogAppIds = mutableStateListOf<String>()
 
@@ -922,6 +939,18 @@ class SteamAppScreen : BaseAppScreen() {
             ),
         )
 
+        val accessibleBranches = SteamService.getAppInfoOf(gameId)
+            ?.branches
+            ?.filterValues { !it.pwdRequired }
+            ?: emptyMap()
+
+        if (accessibleBranches.size > 1) {
+            options += AppMenuOption(
+                AppOptionMenuType.SelectBranch,
+                onClick = { showBranchDialog(appId) },
+            )
+        }
+
         return options
     }
 
@@ -956,6 +985,16 @@ class SteamAppScreen : BaseAppScreen() {
         val gameId = libraryItem.gameId
         val appInfo = remember(libraryItem.appId) {
             SteamService.getAppInfoOf(gameId)
+        }
+
+        // Track branch dialog state
+        var showBranchDialog by remember { mutableStateOf(shouldShowBranchDialog(libraryItem.appId)) }
+
+        LaunchedEffect(libraryItem.appId) {
+            snapshotFlow { shouldShowBranchDialog(libraryItem.appId) }
+                .collect { shouldShow ->
+                    showBranchDialog = shouldShow
+                }
         }
 
         // Track uninstall dialog state
@@ -1275,6 +1314,42 @@ class SteamAppScreen : BaseAppScreen() {
                 dismissBtnText = installDialogState.dismissBtnText,
                 title = installDialogState.title,
                 message = installDialogState.message,
+            )
+        }
+
+        // Branch selection dialog
+        if (showBranchDialog) {
+            val availableBranches = SteamService.getAppInfoOf(gameId)
+                ?.branches
+                ?.filterValues { !it.pwdRequired }
+                ?.keys
+                ?.sortedWith(compareBy { if (it == "public") 0 else 1 })
+                ?: emptyList()
+
+            val currentBranch = ContainerUtils.getOrCreateContainer(context, libraryItem.appId)
+                .getExtra("branch", "public")
+            val currentIndex = availableBranches.indexOf(currentBranch).coerceAtLeast(0)
+            val branchScope = rememberCoroutineScope()
+
+            SingleChoiceDialog(
+                openDialog = true,
+                icon = Icons.Default.AccountTree,
+                title = stringResource(R.string.select_branch),
+                items = availableBranches,
+                currentItem = currentIndex,
+                onSelected = { index ->
+                    val selected = availableBranches[index]
+                    hideBranchDialog(libraryItem.appId)
+                    if (selected != currentBranch) {
+                        val container = ContainerUtils.getOrCreateContainer(context, libraryItem.appId)
+                        val updatedData = ContainerUtils.toContainerData(container).copy(branch = selected)
+                        ContainerUtils.applyToContainer(context, libraryItem.appId, updatedData)
+                        branchScope.launch(Dispatchers.IO) {
+                            SteamService.downloadApp(gameId, emptyList(), isUpdateOrVerify = false)
+                        }
+                    }
+                },
+                onDismiss = { hideBranchDialog(libraryItem.appId) },
             )
         }
 
