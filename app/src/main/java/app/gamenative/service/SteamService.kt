@@ -1102,14 +1102,15 @@ class SteamService : Service(), IChallengeUrlChanged {
                     PrefManager.containerLanguage
                 }
 
-                Timber.tag("SteamService").d("downloadApp: downloading app $appId with language $containerLanguage")
+                val branch = container?.getExtra("branch", "public") ?: "public"
+                Timber.tag("SteamService").d("downloadApp: appId=$appId language=$containerLanguage branch=$branch")
 
                 val depots = getDownloadableDepots(appId = appId, preferredLanguage = containerLanguage)
                 downloadApp(
                     appId = appId,
                     downloadableDepots = depots,
                     userSelectedDlcAppIds = dlcAppIds,
-                    branch = "public",
+                    branch = branch,
                     containerLanguage = containerLanguage,
                     isUpdateOrVerify = isUpdateOrVerify)
             }
