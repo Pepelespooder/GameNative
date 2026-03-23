@@ -22,7 +22,26 @@ interface SteamAppDao {
     suspend fun update(app: SteamApp)
 
     @Query(
-        "SELECT * FROM steam_app AS app " +
+        // Use '{}' AS depots instead of app.depots — the actual column is large JSON that overflows
+        // the 2MB Android CursorWindow across 2000+ rows, causing a fatal crash. The library list
+        // never needs depot data; an empty map is the correct value for all returned rows.
+        "SELECT app.id, app.package_id, app.owner_account_id, app.license_flags, app.received_pics, " +
+            "'{}' AS depots, " +
+            "app.last_change_number, app.branches, app.name, app.type, app.os_list, app.release_state, " +
+            "app.release_date, app.metacritic_score, app.metacritic_full_url, app.logo_hash, " +
+            "app.logo_small_hash, app.icon_hash, app.client_icon_hash, app.client_tga_hash, " +
+            "app.small_capsule, app.header_image, app.library_assets, app.primary_genre, " +
+            "app.review_score, app.review_percentage, app.controller_support, app.demo_of_app_id, " +
+            "app.developer, app.publisher, app.homepage_url, app.game_manual_url, " +
+            "app.load_all_before_launch, app.dlc_app_ids, app.is_free_app, app.dlc_for_app_id, " +
+            "app.must_own_app_to_purchase, app.dlc_available_on_store, app.optional_dlc, " +
+            "app.game_dir, app.install_script, app.no_servers, app.`order`, app.primary_cache, " +
+            "app.valid_os_list, app.third_party_cd_key, app.visible_only_when_installed, " +
+            "app.visible_only_when_subscribed, app.launch_eula_url, app.require_default_install_folder, " +
+            "app.content_type, app.install_dir, app.use_launch_cmd_line, " +
+            "app.launch_without_workshop_updates, app.use_mms, app.install_script_signature, " +
+            "app.install_script_override, app.config, app.ufs, app.last_played, app.playtime_forever " +
+            "FROM steam_app AS app " +
             "WHERE app.id != 480 " + // Actively filter out Spacewar
             // "AND (owner_account_id IN (:ownerIds) OR license_flags & :borrowedCode = :borrowedCode) " +
             "AND app.package_id != :invalidPkgId " +
@@ -79,6 +98,6 @@ interface SteamAppDao {
     @Query("UPDATE steam_app SET last_played = :lastPlayed WHERE id = :appId")
     suspend fun updateLastPlayed(appId: Int, lastPlayed: Long)
 
-    @Query("UPDATE steam_app SET playtime_forever = :playtimeMinutes WHERE id = :appId")
-    suspend fun updatePlaytime(appId: Int, playtimeMinutes: Int)
+    @Query("UPDATE steam_app SET last_played = :lastPlayed, playtime_forever = :playtimeMinutes WHERE id = :appId")
+    suspend fun updatePlayStats(appId: Int, lastPlayed: Long, playtimeMinutes: Int)
 }

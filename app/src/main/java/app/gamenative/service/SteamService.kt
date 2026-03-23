@@ -647,11 +647,8 @@ class SteamService : Service(), IChallengeUrlChanged {
 
                 // Update last played timestamps and playtime for all owned games
                 ownedGames.forEach { game ->
-                    if (game.rtimeLastPlayed > 0) {
-                        service.appDao.updateLastPlayed(game.appId, game.rtimeLastPlayed.toLong())
-                    }
-                    if (game.playtimeForever > 0) {
-                        service.appDao.updatePlaytime(game.appId, game.playtimeForever)
+                    if (game.rtimeLastPlayed > 0 || game.playtimeForever > 0) {
+                        service.appDao.updatePlayStats(game.appId, game.rtimeLastPlayed.toLong(), game.playtimeForever)
                     }
                 }
 
@@ -1610,6 +1607,7 @@ class SteamService : Service(), IChallengeUrlChanged {
                             val mainAppItem = AppItem(
                                 appId,
                                 installDirectory = getAppDirPath(appId),
+                                branch = branch,
                                 depot = mainAppDepotIds,
                             )
 
@@ -1625,6 +1623,7 @@ class SteamService : Service(), IChallengeUrlChanged {
                             val dlcAppItem = AppItem(
                                 dlcAppId,
                                 installDirectory = getAppDirPath(appId),
+                                branch = branch,
                                 depot = dlcDepotIds
                             )
 
@@ -3353,7 +3352,7 @@ class SteamService : Service(), IChallengeUrlChanged {
         scope.launch {
             db.withTransaction {
                 // Send off an event if we change states.
-                if (callback.friendId == steamClient!!.steamID) {
+                if (callback.friendId == steamClient?.steamID) {
                     Timber.d("Local persona state received: ${callback.playerName}")
 
                     val avatarHash = callback.avatarHash.toHexString()

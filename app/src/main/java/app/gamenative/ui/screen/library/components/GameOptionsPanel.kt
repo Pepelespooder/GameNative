@@ -52,6 +52,7 @@ import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.Update
 import androidx.compose.material.icons.filled.VerifiedUser
+import androidx.compose.material.icons.filled.AccountTree
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -162,6 +163,7 @@ fun GameOptionsPanel(
             val categoryLabels = mapOf(
                 OptionCategory.QUICK_ACTIONS to stringResource(R.string.game_options_quick_actions),
                 OptionCategory.GAME_MANAGEMENT to stringResource(R.string.game_options_game_management),
+                OptionCategory.BRANCH to stringResource(R.string.game_options_branch),
                 OptionCategory.CONTAINER to stringResource(R.string.game_options_container),
                 OptionCategory.CLOUD_SAVES to stringResource(R.string.game_options_cloud_saves),
                 OptionCategory.HELP_INFO to stringResource(R.string.game_options_help_info),
@@ -175,7 +177,9 @@ fun GameOptionsPanel(
                         options = categoryOptions,
                         onOptionClick = { option ->
                             option.onClick()
-                            onDismiss()
+                            if (option.optionType != AppOptionMenuType.SelectBranch) {
+                                onDismiss()
+                            }
                         },
                         firstItemFocusRequester = if (isFirstItem) firstItemFocusRequester else null,
                     )
@@ -190,6 +194,7 @@ fun GameOptionsPanel(
 private enum class OptionCategory {
     QUICK_ACTIONS,
     GAME_MANAGEMENT,
+    BRANCH,
     CONTAINER,
     CLOUD_SAVES,
     HELP_INFO,
@@ -347,6 +352,7 @@ private fun getIconForOption(type: AppOptionMenuType): ImageVector {
 private fun groupOptions(options: List<AppMenuOption>): Map<OptionCategory, List<AppMenuOption>> {
     val quickActions = mutableListOf<AppMenuOption>()
     val gameManagement = mutableListOf<AppMenuOption>()
+    val branch = mutableListOf<AppMenuOption>()
     val containerSettings = mutableListOf<AppMenuOption>()
     val cloudSaves = mutableListOf<AppMenuOption>()
     val helpInfo = mutableListOf<AppMenuOption>()
@@ -366,8 +372,11 @@ private fun groupOptions(options: List<AppMenuOption>): Map<OptionCategory, List
             AppOptionMenuType.Update,
             AppOptionMenuType.MoveToExternalStorage,
             AppOptionMenuType.MoveToInternalStorage,
-            AppOptionMenuType.SelectBranch,
             -> gameManagement.add(option)
+
+            // Branch
+            AppOptionMenuType.SelectBranch,
+            -> branch.add(option)
 
             // Container Settings
             AppOptionMenuType.ResetToDefaults,
@@ -398,6 +407,7 @@ private fun groupOptions(options: List<AppMenuOption>): Map<OptionCategory, List
     return linkedMapOf(
         OptionCategory.QUICK_ACTIONS to quickActions,
         OptionCategory.GAME_MANAGEMENT to gameManagement,
+        OptionCategory.BRANCH to branch,
         OptionCategory.CONTAINER to containerSettings,
         OptionCategory.CLOUD_SAVES to cloudSaves,
         OptionCategory.HELP_INFO to helpInfo,

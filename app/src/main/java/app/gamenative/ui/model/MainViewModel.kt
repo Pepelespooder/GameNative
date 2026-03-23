@@ -16,7 +16,6 @@ import app.gamenative.enums.PathType
 import app.gamenative.events.AndroidEvent
 import app.gamenative.events.SteamEvent
 import app.gamenative.ui.enums.Orientation
-import java.util.EnumSet
 import app.gamenative.service.SteamService
 import app.gamenative.ui.data.MainState
 import app.gamenative.ui.enums.ConnectionState

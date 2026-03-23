@@ -643,7 +643,8 @@ class LibraryViewModel @Inject constructor(
 
                 SortOption.NAME_DESC -> compareByDescending { it.item.name.lowercase() }
 
-                SortOption.RECENTLY_PLAYED -> compareByDescending<LibraryEntry> { it.item.lastPlayed }
+                SortOption.RECENTLY_PLAYED -> compareBy<LibraryEntry> { if (it.isInstalled) 0 else 1 }
+                    .thenByDescending { it.item.lastPlayed }
                     .thenBy { it.item.name.lowercase() }
 
                 SortOption.SIZE_SMALLEST -> compareBy<LibraryEntry> { it.item.sizeBytes }

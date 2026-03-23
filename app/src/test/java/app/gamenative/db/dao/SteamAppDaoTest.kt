@@ -153,4 +153,5 @@ class SteamAppDaoTest {
         val result = appDao.getAllOwnedApps().first()
         assertFalse(ids(result).contains(1000))
     }
+
 }

@@ -17,10 +17,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -29,7 +32,9 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -55,6 +60,8 @@ import app.gamenative.ui.component.topbar.BackButton
 import app.gamenative.ui.data.GameDisplayInfo
 import app.gamenative.ui.internal.fakeAppInfo
 import app.gamenative.ui.theme.PluviaTheme
+import app.gamenative.utils.ContainerUtils
+import com.winlator.container.ContainerManager
 import app.gamenative.utils.SteamUtils
 import app.gamenative.utils.StorageUtils
 import com.skydoves.landscapist.ImageOptions
@@ -77,7 +84,7 @@ data class InstallSizeInfo(
 fun GameManagerDialog(
     visible: Boolean,
     onGetDisplayInfo: @Composable (Context) -> GameDisplayInfo,
-    onInstall: (List<Int>) -> Unit,
+    onInstall: (List<Int>, Boolean) -> Unit,
     onDismissRequest: () -> Unit
 ) {
     val context = LocalContext.current
@@ -247,6 +254,30 @@ fun GameManagerDialog(
         )
     }
 
+    val accessibleBranches = remember(gameId) {
+        SteamService.getAppInfoOf(gameId)
+            ?.branches
+            ?.filterValues { !it.pwdRequired }
+            ?.keys
+            ?.sortedWith(compareBy { if (it == "public") 0 else 1 })
+            ?: emptyList()
+    }
+
+    val originalBranch = remember(gameId) {
+        // Read branch from existing container only — never create one here (that does full Wine
+        // prefix setup with thousands of chmod calls and blocks the main thread causing ANR).
+        // If no container exists yet, fall back to the first accessible branch from Steam.
+        val containerManager = ContainerManager(context)
+        val containerId = "STEAM_$gameId"
+        if (containerManager.hasContainer(containerId)) {
+            ContainerUtils.toContainerData(containerManager.getContainerById(containerId)).branch
+        } else {
+            accessibleBranches.firstOrNull() ?: "public"
+        }
+    }
+    var selectedBranch by remember(gameId) { mutableStateOf(originalBranch) }
+    var branchDropdownExpanded by remember { mutableStateOf(false) }
+
     val selectableAppIds by remember(enabledAppIds.toMap()) {
         derivedStateOf {
             enabledAppIds.filter { it.value }.keys.toList()
@@ -401,6 +432,50 @@ fun GameManagerDialog(
                         Column(
                             modifier = Modifier.fillMaxWidth()
                         ) {
+                            // Branch selector (only when multiple branches exist)
+                            if (accessibleBranches.size > 1) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Text(
+                                        text = stringResource(R.string.select_branch),
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                    )
+                                    Box {
+                                        OutlinedButton(onClick = { branchDropdownExpanded = true }) {
+                                            Text(selectedBranch)
+                                        }
+                                        DropdownMenu(
+                                            expanded = branchDropdownExpanded,
+                                            onDismissRequest = { branchDropdownExpanded = false },
+                                        ) {
+                                            accessibleBranches.forEach { branch ->
+                                                DropdownMenuItem(
+                                                    text = { Text(branch) },
+                                                    onClick = {
+                                                        selectedBranch = branch
+                                                        branchDropdownExpanded = false
+                                                        val container = ContainerUtils.getOrCreateContainer(context, "STEAM_$gameId")
+                                                        val updatedData = ContainerUtils.toContainerData(container).copy(branch = branch)
+                                                        ContainerUtils.applyToContainer(context, container, updatedData)
+                                                    },
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                                HorizontalDivider(
+                                    modifier = Modifier.padding(horizontal = 16.dp),
+                                    thickness = 0.5.dp,
+                                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f),
+                                )
+                            }
+
                             // Select All toggle
                             if (selectableAppIds.isNotEmpty()) {
                                 Row(
@@ -485,9 +560,12 @@ fun GameManagerDialog(
                                 Button(
                                     enabled = installButtonEnabled(),
                                     onClick = {
-                                        onInstall(selectedAppIds
-                                            .filter { selectedId -> selectedId.key in enabledAppIds.filter { enabledId -> enabledId.value } }
-                                            .filter { selectedId -> selectedId.value }.keys.toList())
+                                        onInstall(
+                                            selectedAppIds
+                                                .filter { selectedId -> selectedId.key in enabledAppIds.filter { enabledId -> enabledId.value } }
+                                                .filter { selectedId -> selectedId.value }.keys.toList(),
+                                            selectedBranch != originalBranch,
+                                        )
                                     }
                                 ) {
                                     Text(stringResource(R.string.install))
@@ -526,7 +604,7 @@ fun Preview_GameManagerDialog() {
             onGetDisplayInfo = {
                 return@GameManagerDialog displayInfo
             },
-            onInstall = {},
+            onInstall = { _, _ -> },
             onDismissRequest = {}
         )
     }

@@ -1099,6 +1099,7 @@
     <string name="game_options_title">Options</string>
     <string name="game_options_quick_actions">Quick Actions</string>
     <string name="game_options_game_management">Game Management</string>
+    <string name="game_options_branch">Branch</string>
     <string name="game_options_container">Container</string>
     <string name="game_options_cloud_saves">Cloud Saves</string>
     <string name="game_options_help_info">Help &amp; Info</string>
