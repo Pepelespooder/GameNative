@@ -43,23 +43,17 @@ interface SteamAppDao {
             "app.install_script_override, app.config, app.ufs, app.last_played, app.playtime_forever " +
             "FROM steam_app AS app " +
             "WHERE app.id != 480 " + // Actively filter out Spacewar
-            // "AND (owner_account_id IN (:ownerIds) OR license_flags & :borrowedCode = :borrowedCode) " +
             "AND app.package_id != :invalidPkgId " +
             "AND app.type != 0 " +
             "AND EXISTS (" +
             "  SELECT 1 FROM steam_license AS license " +
-            "  WHERE (license.license_flags & 8 = 0) " + // exclude Expired licenses (e.g. free weekends)
-            "  AND (" +
-            "    (license.packageId = app.package_id AND license.app_ids = '[]') " + // this app's package PICS not yet fetched — allow provisionally
-            "    OR REPLACE(REPLACE(license.app_ids, '[', ','), ']', ',') LIKE ('%,' || app.id || ',%')" + // any non-expired license lists this appId
-            "  )" +
+            "  WHERE license.packageId = app.package_id " +
+            "  AND (license.license_flags & 8 = 0) " + // exclude expired licenses (e.g. free weekends)
             ") " +
             "ORDER BY LOWER(app.name)",
     )
     fun getAllOwnedApps(
-        // ownerIds: List<Int>,
         invalidPkgId: Int = INVALID_PKG_ID,
-        // borrowedCode: Int = ELicenseFlags.Borrowed.code(),
     ): Flow<List<SteamApp>>
 
     @Query("SELECT * FROM steam_app WHERE received_pics = 0 AND package_id != :invalidPkgId AND owner_account_id = :ownerId")
