@@ -406,7 +406,6 @@ object SteamUtils {
         val gameName = getAppDirName(getAppInfoOf(steamAppId))
         val executablePath = container.executablePath.replace("/", "\\")
         val exePath = "steamapps\\common\\$gameName\\$executablePath"
-        val exeRunDir = "steamapps\\common\\$gameName"
         val exeCommandLine = container.execArgs
         val iniFile = File(container.getRootDir(), ".wine/drive_c/Program Files (x86)/Steam/ColdClientLoader.ini")
         iniFile.parentFile?.mkdirs()
@@ -430,7 +429,7 @@ object SteamUtils {
                 [SteamClient]
 
                 Exe=$exePath
-                ExeRunDir=$exeRunDir
+                ExeRunDir=
                 ExeCommandLine=$exeCommandLine
                 AppId=$steamAppId
 
