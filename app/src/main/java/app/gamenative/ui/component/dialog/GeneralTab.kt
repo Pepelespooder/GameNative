@@ -370,7 +370,6 @@ fun GeneralTabContent(
                         TextButton(onClick = {
                             showDeleteConfirmation = false
                             onDeleteWorkshopMods()
-                            state.config.value = state.config.value.copy(workshopMods = false)
                         }) {
                             Text(text = stringResource(R.string.delete))
                         }

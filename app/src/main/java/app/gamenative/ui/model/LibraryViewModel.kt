@@ -27,6 +27,7 @@ import app.gamenative.service.SteamService
 import app.gamenative.service.amazon.AmazonService
 import app.gamenative.service.epic.EpicService
 import app.gamenative.service.gog.GOGService
+import app.gamenative.enums.ControllerSupport
 import app.gamenative.ui.data.LibraryState
 import app.gamenative.ui.enums.AppFilter
 import app.gamenative.ui.enums.LibraryTab
@@ -65,7 +66,15 @@ class LibraryViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
 ) : ViewModel() {
 
-    private val _state = MutableStateFlow(LibraryState(isLoading = true))
+    private val _state = MutableStateFlow(
+        LibraryState(
+            isLoading = true,
+            currentSortOption = PrefManager.librarySortOption.let { sort ->
+                val steamOnlySorts = setOf(SortOption.RECENTLY_PLAYED, SortOption.RECENTLY_ADDED)
+                if (sort in steamOnlySorts) SortOption.INSTALLED_FIRST else sort
+            }
+        )
+    )
     val state: StateFlow<LibraryState> = _state.asStateFlow()
 
     // Keep the library scroll state. This will last longer as the VM will stay alive.
@@ -93,6 +102,12 @@ class LibraryViewModel @Inject constructor(
 
     // Track if this is the first load to apply minimum load time
     private var isFirstLoad = true
+
+    // Remember sort option per tab
+    private val sortOptionPerTab = mutableMapOf<LibraryTab, SortOption>()
+
+    // Remember filter per tab
+    private val filterPerTab = mutableMapOf<LibraryTab, EnumSet<AppFilter>>()
 
     // Track debounce job for search
     private var searchDebounceJob: Job? = null
@@ -221,8 +236,18 @@ class LibraryViewModel @Inject constructor(
     }
 
     fun onSortOptionChanged(sortOption: SortOption) {
-        PrefManager.librarySortOption = sortOption
-        _state.update { it.copy(currentSortOption = sortOption) }
+        val steamOnlySorts = setOf(SortOption.RECENTLY_PLAYED, SortOption.RECENTLY_ADDED)
+        _state.update { current ->
+            val effectiveSort = if (current.currentTab != LibraryTab.STEAM && sortOption in steamOnlySorts) {
+                SortOption.INSTALLED_FIRST
+            } else {
+                sortOption
+            }
+
+            sortOptionPerTab[current.currentTab] = effectiveSort
+            PrefManager.librarySortOption = effectiveSort
+            current.copy(currentSortOption = effectiveSort)
+        }
         onFilterApps()
     }
 
@@ -230,27 +255,45 @@ class LibraryViewModel @Inject constructor(
         _state.update { it.copy(isOptionsPanelOpen = isOpen) }
     }
 
+    private fun performTabChange(newTab: LibraryTab) {
+        val steamOnlySorts = setOf(SortOption.RECENTLY_PLAYED, SortOption.RECENTLY_ADDED)
+        _state.update { current ->
+            // Save current sort and filter for the tab we're leaving
+            sortOptionPerTab[current.currentTab] = current.currentSortOption
+            filterPerTab[current.currentTab] = EnumSet.copyOf(current.appInfoSortType)
+
+            // Restore saved sort for the new tab, falling back to persisted global pref
+            val savedSort = sortOptionPerTab[newTab] ?: PrefManager.librarySortOption
+
+            // If the restored sort is Steam-only but we're not on the Steam tab, use INSTALLED_FIRST
+            val sort = if (newTab != LibraryTab.STEAM && savedSort in steamOnlySorts) {
+                SortOption.INSTALLED_FIRST
+            } else {
+                savedSort
+            }
+
+            // Restore saved filter for the new tab, falling back to persisted global pref
+            val savedFilter = filterPerTab[newTab] ?: PrefManager.libraryFilter
+
+            current.copy(currentTab = newTab, currentSortOption = sort, appInfoSortType = savedFilter)
+        }
+        onFilterApps(0)
+    }
+
     fun onTabChanged(tab: LibraryTab) {
-        _state.update { it.copy(currentTab = tab) }
-        onFilterApps(0) // Reset to first page and refresh
+        performTabChange(tab)
     }
 
     fun onNextTab() {
-        _state.update { currentState ->
-            val nextTab = currentState.currentTab.next()
-            Timber.tag("LibraryViewModel").d("Tab next via bumper: ${currentState.currentTab} -> $nextTab")
-            currentState.copy(currentTab = nextTab)
-        }
-        onFilterApps(0)
+        val nextTab = _state.value.currentTab.next()
+        Timber.tag("LibraryViewModel").d("Tab next via bumper: ${_state.value.currentTab} -> $nextTab")
+        performTabChange(nextTab)
     }
 
     fun onPreviousTab() {
-        _state.update { currentState ->
-            val previousTab = currentState.currentTab.previous()
-            Timber.tag("LibraryViewModel").d("Tab previous via bumper: ${currentState.currentTab} -> $previousTab")
-            currentState.copy(currentTab = previousTab)
-        }
-        onFilterApps(0)
+        val previousTab = _state.value.currentTab.previous()
+        Timber.tag("LibraryViewModel").d("Tab previous via bumper: ${_state.value.currentTab} -> $previousTab")
+        performTabChange(previousTab)
     }
 
     fun onSearchQuery(value: String) {
@@ -279,6 +322,9 @@ class LibraryViewModel @Inject constructor(
                 updatedFilter.add(value)
             }
 
+            filterPerTab[currentState.currentTab] = EnumSet.copyOf(updatedFilter)
+
+            // Persist the filter globally
             PrefManager.libraryFilter = updatedFilter
 
             currentState.copy(appInfoSortType = updatedFilter)
@@ -409,6 +455,13 @@ class LibraryViewModel @Inject constructor(
                         currentState.appInfoSortType.contains(AppFilter.INSTALLED)
                     if (installedOnly) {
                         downloadDirectorySet.contains(SteamService.getAppDirName(item))
+                    } else {
+                        true
+                    }
+                }
+                .filter { item ->
+                    if (currentState.appInfoSortType.contains(AppFilter.CONTROLLER_SUPPORT)) {
+                        item.controllerSupport != ControllerSupport.none
                     } else {
                         true
                     }

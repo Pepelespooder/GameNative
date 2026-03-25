@@ -86,9 +86,9 @@ private fun getBadgeStyle(status: GameCompatibilityStatus): BadgeStyle {
     return when (status) {
         GameCompatibilityStatus.COMPATIBLE -> BadgeStyle(
             icon = Icons.Rounded.Verified,
-            backgroundColor = colors.compatibilityGoodBackground.copy(alpha = 0.9f),
-            iconTint = colors.compatibilityGood,
-            labelResId = R.string.library_compatible,
+            backgroundColor = colors.compatibilityMayWorkBackground.copy(alpha = 0.9f),
+            iconTint = colors.compatibilityMayWork,
+            labelResId = R.string.library_may_work,
         )
 
         GameCompatibilityStatus.GPU_COMPATIBLE -> BadgeStyle(

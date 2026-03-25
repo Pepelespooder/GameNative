@@ -55,6 +55,8 @@ data class PluviaColors(
     // Compatibility
     val compatibilityGood: Color,
     val compatibilityGoodBackground: Color,
+    val compatibilityMayWork: Color,
+    val compatibilityMayWorkBackground: Color,
     val compatibilityPartial: Color,
     val compatibilityPartialBackground: Color,
     val compatibilityUnknown: Color,
@@ -95,6 +97,8 @@ private val DarkPluviaColors = PluviaColors(
 
     compatibilityGood = CompatibilityGood,
     compatibilityGoodBackground = CompatibilityGoodBg,
+    compatibilityMayWork = CompatibilityMayWork,
+    compatibilityMayWorkBackground = CompatibilityMayWorkBg,
     compatibilityPartial = CompatibilityPartial,
     compatibilityPartialBackground = CompatibilityPartialBg,
     compatibilityUnknown = CompatibilityUnknown,
@@ -230,6 +234,8 @@ object DarkColors {
 
     val compatibilityGood = CompatibilityGood
     val compatibilityGoodBackground = CompatibilityGoodBg
+    val compatibilityMayWork = CompatibilityMayWork
+    val compatibilityMayWorkBackground = CompatibilityMayWorkBg
     val compatibilityPartial = CompatibilityPartial
     val compatibilityPartialBackground = CompatibilityPartialBg
     val compatibilityUnknown = CompatibilityUnknown

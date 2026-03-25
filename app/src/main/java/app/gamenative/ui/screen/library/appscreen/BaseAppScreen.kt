@@ -38,6 +38,7 @@ import app.gamenative.utils.createPinnedShortcut
 import com.winlator.container.ContainerData
 import java.io.File
 import kotlin.text.Charsets
+import app.gamenative.workshop.WorkshopManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -784,6 +785,25 @@ abstract class BaseAppScreen {
                 onSave = {
                     saveContainerConfig(context, libraryItem, it)
                     showConfigDialog = false
+                },
+                onDeleteWorkshopMods = {
+                    uiScope.launch(Dispatchers.IO) {
+                        val container = ContainerUtils.getContainer(context, libraryItem.appId)
+                        val drives = container.drives
+                        val gameRootDir = ContainerUtils.getADrivePath(drives)?.let { java.io.File(it) }
+                        val gameName = libraryItem.name
+
+                        WorkshopManager.deleteWorkshopMods(
+                            context = context,
+                            containerId = libraryItem.appId,
+                            gameRootDir = gameRootDir,
+                            gameName = gameName,
+                        )
+
+                        withContext(Dispatchers.Main) {
+                            app.gamenative.ui.util.SnackbarManager.show(context.getString(R.string.workshop_mods_deleted))
+                        }
+                    }
                 },
             )
         }

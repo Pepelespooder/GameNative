@@ -1061,6 +1061,7 @@ private fun LibraryScreenContent(
                     PrefManager.libraryLayout = newPaneType
                     currentPaneType = newPaneType
                 },
+                currentTab = state.currentTab,
             )
 
             // System menu (START) - renders on top of everything

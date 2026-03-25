@@ -639,6 +639,7 @@
     <string name="workshop_local_only_description">Only use mods downloaded via Browse Workshop. Skip fetching Steam subscriptions on launch</string>
     <string name="delete_workshop_mods">Delete Workshop Mods</string>
     <string name="delete_workshop_mods_confirm">This will delete all downloaded workshop mods and their symlinks for this game. You will need to re-download them if you enable workshop mods again. Continue?</string>
+    <string name="workshop_mods_deleted">Workshop mods deleted successfully</string>
     <string name="force_dlc">Force DLC</string>
     <string name="force_dlc_description">Only enable if DLCs are not detected or saves with DLC are not working</string>
     <string name="local_saves_only">Local saves only</string>
@@ -1053,6 +1054,7 @@
     <string name="library_family_shared">Family Shared</string>
     <string name="library_shared_short">Shared</string>
     <string name="library_compatible">Compatible</string>
+    <string name="library_may_work">May Work</string>
     <string name="library_gpu_compatible">GPU Compatible</string>
     <string name="library_compatibility_unknown">Unknown</string>
     <string name="library_not_compatible">Not Compatible</string>

@@ -1,7 +1,6 @@
 package app.gamenative.ui.screen.library.components
 
 import android.content.res.Configuration
-import android.view.KeyEvent
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Spring
@@ -35,14 +34,13 @@ import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Compress
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.NewReleases
 import androidx.compose.material.icons.filled.PhotoAlbum
 import androidx.compose.material.icons.filled.PhotoSizeSelectActual
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.SortByAlpha
-import androidx.compose.material.icons.filled.NewReleases
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.ViewCarousel
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -53,9 +51,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -67,12 +67,14 @@ import app.gamenative.ui.component.OptionListItem
 import app.gamenative.ui.component.OptionRadioItem
 import app.gamenative.ui.component.OptionSectionHeader
 import app.gamenative.ui.enums.AppFilter
+import app.gamenative.ui.enums.LibraryTab
 import app.gamenative.ui.enums.PaneType
 import app.gamenative.ui.enums.SortOption
 import app.gamenative.ui.theme.PluviaTheme
 import app.gamenative.ui.util.adaptivePanelWidth
 import java.util.EnumSet
 
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun LibraryOptionsPanel(
     isOpen: Boolean,
@@ -83,8 +85,13 @@ fun LibraryOptionsPanel(
     onSortOptionChanged: (SortOption) -> Unit,
     currentView: PaneType,
     onViewChanged: (PaneType) -> Unit,
+    currentTab: LibraryTab = LibraryTab.ALL,
     modifier: Modifier = Modifier,
 ) {
+    val steamOnlyOptions = setOf(SortOption.RECENTLY_PLAYED, SortOption.RECENTLY_ADDED)
+    val visibleSortOptions = SortOption.entries.filter { option ->
+        option !in steamOnlyOptions || currentTab == LibraryTab.STEAM
+    }
     val firstItemFocusRequester = remember { FocusRequester() }
 
     BackHandler(enabled = isOpen) {
@@ -129,7 +136,10 @@ fun LibraryOptionsPanel(
             Surface(
                 modifier = Modifier
                     .width(adaptivePanelWidth(300.dp))
-                    .fillMaxHeight(),
+                    .fillMaxHeight()
+                    .focusProperties {
+                        onExit = { FocusRequester.Cancel }
+                    },
                 shape = RoundedCornerShape(topEnd = 24.dp, bottomEnd = 24.dp),
                 color = MaterialTheme.colorScheme.surface,
                 tonalElevation = 2.dp,
@@ -182,7 +192,7 @@ fun LibraryOptionsPanel(
                                 .padding(horizontal = 8.dp),
                             verticalArrangement = Arrangement.spacedBy(2.dp)
                         ) {
-                            SortOption.entries.forEachIndexed { index, option ->
+                            visibleSortOptions.forEachIndexed { index, option ->
                                 OptionRadioItem(
                                     text = stringResource(option.displayTextRes),
                                     selected = currentSortOption == option,
@@ -234,11 +244,13 @@ fun LibraryOptionsPanel(
                             verticalArrangement = Arrangement.spacedBy(2.dp)
                         ) {
                             AppFilter.entries.forEach { appFilter ->
+                                val steamOnlyFilters = setOf(AppFilter.CONTROLLER_SUPPORT)
                                 if (appFilter in listOf(
                                         AppFilter.INSTALLED,
                                         AppFilter.SHARED,
                                         AppFilter.COMPATIBLE,
-                                    )
+                                        AppFilter.CONTROLLER_SUPPORT,
+                                    ) && (appFilter !in steamOnlyFilters || currentTab == LibraryTab.STEAM)
                                 ) {
                                     OptionListItem(
                                         text = appFilter.displayText,

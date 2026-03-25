@@ -75,6 +75,8 @@ val FriendBlocked = Color(0xFF983D3D)
 // Compatibility
 val CompatibilityGood = Color(0xFF4CAF50)
 val CompatibilityGoodBg = Color(0xFF1B5E20)
+val CompatibilityMayWork = Color(0xFFFFC107)
+val CompatibilityMayWorkBg = Color(0xFF4A3600)
 val CompatibilityPartial = Color(0xFF8BC34A)
 val CompatibilityPartialBg = Color(0xFF33691E)
 val CompatibilityUnknown = Color(0xFF9E9E9E)

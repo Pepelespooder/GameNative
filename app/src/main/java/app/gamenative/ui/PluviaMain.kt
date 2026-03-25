@@ -818,6 +818,25 @@ private fun GlobalDialogs(
                         setShowContainerConfigDialog(false)
                     }
                 },
+                onDeleteWorkshopMods = {
+                    scope.launch(Dispatchers.IO) {
+                        val container = ContainerUtils.getContainer(context, configDialogAppId)
+                        val drives = container.drives
+                        val gameRootDir = ContainerUtils.getADrivePath(drives)?.let { java.io.File(it) }
+                        val gameName = ContainerUtils.resolveGameName(configDialogAppId)
+
+                        WorkshopManager.deleteWorkshopMods(
+                            context = context,
+                            containerId = configDialogAppId,
+                            gameRootDir = gameRootDir,
+                            gameName = gameName,
+                        )
+
+                        withContext(Dispatchers.Main) {
+                            app.gamenative.ui.util.SnackbarManager.show(context.getString(R.string.workshop_mods_deleted))
+                        }
+                    }
+                },
             )
         }
     }

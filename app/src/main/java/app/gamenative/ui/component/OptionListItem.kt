@@ -40,6 +40,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.tooling.preview.Preview
@@ -140,6 +145,14 @@ fun OptionListItem(
                 } else Modifier
             )
             .focusRequester(focusRequester)
+            .onKeyEvent { event ->
+                if (event.type == KeyEventType.KeyUp &&
+                    (event.key == Key.DirectionCenter || event.key == Key.Enter || event.key == Key.NumPadEnter)
+                ) {
+                    onClick()
+                    true
+                } else false
+            }
             .selectable(
                 selected = selected,
                 interactionSource = interactionSource,
@@ -215,6 +228,14 @@ fun OptionRadioItem(
                 } else Modifier
             )
             .focusRequester(focusRequester)
+            .onKeyEvent { event ->
+                if (event.type == KeyEventType.KeyUp &&
+                    (event.key == Key.DirectionCenter || event.key == Key.Enter || event.key == Key.NumPadEnter)
+                ) {
+                    onClick()
+                    true
+                } else false
+            }
             .selectable(
                 selected = selected,
                 interactionSource = interactionSource,
