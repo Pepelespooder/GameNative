@@ -33,6 +33,8 @@ object Constants {
         const val STORE_URL = "https://store.steampowered.com/app/"
     }
 
+    const val DISCORD_URL = "https://discord.gg/gamenative"
+
     object Misc {
         const val KO_FI_LINK = "https://ko-fi.com/gamenative"
         const val GITHUB_LINK = "https://github.com/utkarshdalal/GameNative"

@@ -53,6 +53,7 @@ import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.Update
 import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material.icons.filled.AccountTree
+import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -346,6 +347,7 @@ private fun getIconForOption(type: AppOptionMenuType): ImageVector {
         AppOptionMenuType.ExportConfig -> Icons.Default.ArrowUpward
         AppOptionMenuType.ManageGameContent -> Icons.Default.Apps
         AppOptionMenuType.SelectBranch -> Icons.Default.AccountTree
+        AppOptionMenuType.BrowseWorkshop -> Icons.Default.Extension
     }
 }
 
@@ -372,6 +374,7 @@ private fun groupOptions(options: List<AppMenuOption>): Map<OptionCategory, List
             AppOptionMenuType.Update,
             AppOptionMenuType.MoveToExternalStorage,
             AppOptionMenuType.MoveToInternalStorage,
+            AppOptionMenuType.BrowseWorkshop,
             -> gameManagement.add(option)
 
             // Branch

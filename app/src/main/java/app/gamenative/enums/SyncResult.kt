@@ -6,6 +6,7 @@ enum class SyncResult {
     InProgress,
     PendingOperations,
     Conflict,
+    AppSessionActive,
     UpdateFail,
     DownloadFail,
     UnknownFail,

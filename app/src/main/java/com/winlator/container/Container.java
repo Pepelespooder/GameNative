@@ -151,6 +151,10 @@ public class Container {
 
     private boolean unpackFiles = false;
 
+    private boolean workshopMods = false;
+
+    private boolean workshopLocalOnly = false;
+
     private String suspendPolicy = SUSPEND_POLICY_MANUAL;
 
     private boolean portraitMode = false;
@@ -613,6 +617,7 @@ public class Container {
         }
         return drive;
     }
+
     public static Iterable<String[]> drivesIterator(final String drives) {
         final int[] index = {drives.indexOf(":")};
         final String[] item = new String[2];
@@ -709,12 +714,18 @@ public class Container {
             // Unpack Files setting
             data.put("unpackFiles", unpackFiles);
 
+            // Workshop Mods setting
+            data.put("workshopMods", workshopMods);
+            data.put("workshopLocalOnly", workshopLocalOnly);
+
             // Process suspend policy setting
             data.put("suspendPolicy", suspendPolicy);
             data.put("portraitMode", portraitMode);
 
             if (!WineInfo.isMainWineVersion(wineVersion)) data.put("wineVersion", wineVersion);
-            FileUtils.writeString(getConfigFile(), data.toString());
+            
+            String dataStr = data.toString();
+            FileUtils.writeString(getConfigFile(), dataStr);
         }
         catch (JSONException e) {
             Log.e("Container", "Failed to save data: " + e);
@@ -905,6 +916,12 @@ public class Container {
                 case "unpackFiles":
                     this.unpackFiles = data.getBoolean(key);
                     break;
+                case "workshopMods":
+                    this.workshopMods = data.getBoolean(key);
+                    break;
+                case "workshopLocalOnly":
+                    this.workshopLocalOnly = data.getBoolean(key);
+                    break;
                 case "suspendPolicy":
                     setSuspendPolicy(data.getString(key));
                     break;
@@ -1005,6 +1022,22 @@ public class Container {
 
     public void setUnpackFiles(boolean unpackFiles) {
         this.unpackFiles = unpackFiles;
+    }
+
+    public boolean isWorkshopMods() {
+        return workshopMods;
+    }
+
+    public void setWorkshopMods(boolean workshopMods) {
+        this.workshopMods = workshopMods;
+    }
+
+    public boolean isWorkshopLocalOnly() {
+        return workshopLocalOnly;
+    }
+
+    public void setWorkshopLocalOnly(boolean workshopLocalOnly) {
+        this.workshopLocalOnly = workshopLocalOnly;
     }
 
     public static String normalizeSuspendPolicy(String suspendPolicy) {

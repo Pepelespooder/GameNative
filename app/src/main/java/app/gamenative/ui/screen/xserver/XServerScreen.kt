@@ -3163,7 +3163,7 @@ private fun getWineStartCommand(
 
         // Find the A: drive (which should map to the game folder)
         var gameFolderPath: String? = null
-        for (drive in Container.drivesIterator(container.drives)) {
+        for (drive in container.drivesIterator()) {
             if (drive[0] == "A") {
                 gameFolderPath = drive[1]
                 break

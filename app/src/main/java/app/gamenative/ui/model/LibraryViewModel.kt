@@ -18,6 +18,7 @@ import app.gamenative.data.GOGGame
 import app.gamenative.data.EpicGame
 import app.gamenative.data.AmazonGame
 import app.gamenative.db.dao.SteamAppDao
+import app.gamenative.db.dao.SteamLicenseDao
 import app.gamenative.db.dao.GOGGameDao
 import app.gamenative.db.dao.EpicGameDao
 import app.gamenative.db.dao.AmazonGameDao
@@ -57,6 +58,7 @@ import timber.log.Timber
 @HiltViewModel
 class LibraryViewModel @Inject constructor(
     private val steamAppDao: SteamAppDao,
+    private val steamLicenseDao: SteamLicenseDao,
     private val gogGameDao: GOGGameDao,
     private val epicGameDao: EpicGameDao,
     private val amazonGameDao: AmazonGameDao,
@@ -425,6 +427,15 @@ class LibraryViewModel @Inject constructor(
                 )
                 .toList()
 
+            // Build appId → license timeCreated map (used for "Recently Added" sort)
+            val licenseAddedMap: Map<Int, Long> = if (currentState.currentSortOption == SortOption.RECENTLY_ADDED) {
+                steamLicenseDao.getAllLicenses()
+                    .flatMap { license -> license.appIds.map { appId -> appId to license.timeCreated.time } }
+                    .toMap()
+            } else {
+                emptyMap()
+            }
+
             // Map Steam apps to UI items
             data class LibraryEntry(val item: LibraryItem, val isInstalled: Boolean)
             val steamEntries: List<LibraryEntry> = filteredSteamApps.map { item ->
@@ -445,6 +456,7 @@ class LibraryViewModel @Inject constructor(
                         isShared = (PrefManager.steamUserAccountId != 0 && !item.ownerAccountId.contains(PrefManager.steamUserAccountId)),
                         sizeBytes = totalSizeBytes,
                         lastPlayed = item.lastPlayed,
+                        dateAdded = licenseAddedMap[item.id] ?: 0L,
                     ),
                     isInstalled = isInstalled,
                 )
@@ -498,6 +510,7 @@ class LibraryViewModel @Inject constructor(
                         heroImageUrl = game.imageUrl.ifEmpty { game.iconUrl },
                         isShared = false,
                         gameSource = GameSource.GOG,
+                        lastPlayed = game.lastPlayed,
                     ),
                     isInstalled = game.isInstalled,
                 )
@@ -538,6 +551,7 @@ class LibraryViewModel @Inject constructor(
                         heroImageUrl = game.artPortrait.ifEmpty { game.artSquare.ifEmpty { game.artCover } },
                         isShared = false,
                         gameSource = GameSource.EPIC,
+                        lastPlayed = game.lastPlayed,
                     ),
                     isInstalled = game.isInstalled,
                 )
@@ -578,6 +592,7 @@ class LibraryViewModel @Inject constructor(
                         heroImageUrl = game.heroUrl.ifEmpty { game.artUrl },
                         isShared = false,
                         gameSource = GameSource.AMAZON,
+                        lastPlayed = game.lastPlayed,
                     ),
                     isInstalled = game.isInstalled,
                 )
@@ -651,6 +666,9 @@ class LibraryViewModel @Inject constructor(
                     .thenBy { it.item.name.lowercase() }
 
                 SortOption.SIZE_LARGEST -> compareByDescending<LibraryEntry> { it.item.sizeBytes }
+                    .thenBy { it.item.name.lowercase() }
+
+                SortOption.RECENTLY_ADDED -> compareByDescending<LibraryEntry> { it.item.dateAdded }
                     .thenBy { it.item.name.lowercase() }
             }
 

@@ -16,6 +16,7 @@ enum class SortOption(
     RECENTLY_PLAYED(displayTextRes = R.string.sort_recently_played, key = "recently_played"),
     SIZE_SMALLEST(displayTextRes = R.string.sort_size_smallest, key = "size_smallest"),
     SIZE_LARGEST(displayTextRes = R.string.sort_size_largest, key = "size_largest"),
+    RECENTLY_ADDED(displayTextRes = R.string.sort_recently_added, key = "recently_added"),
     ;
 
     companion object {

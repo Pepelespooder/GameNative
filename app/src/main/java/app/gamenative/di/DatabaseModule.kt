@@ -9,6 +9,7 @@ import app.gamenative.db.dao.AmazonGameDao
 import app.gamenative.db.dao.CachedLicenseDao
 import app.gamenative.db.dao.DownloadingAppInfoDao
 import app.gamenative.db.dao.EncryptedAppTicketDao
+import app.gamenative.db.dao.WorkshopItemDao
 import app.gamenative.db.migration.ROOM_MIGRATION_V7_to_V8
 import dagger.Module
 import dagger.Provides
@@ -75,4 +76,8 @@ class DatabaseModule {
     @Provides
     @Singleton
     fun provideDownloadingAppInfoDao(db: PluviaDatabase): DownloadingAppInfoDao = db.downloadingAppInfoDao()
+
+    @Provides
+    @Singleton
+    fun provideWorkshopItemDao(db: PluviaDatabase): WorkshopItemDao = db.workshopItemDao()
 }

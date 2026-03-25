@@ -12,4 +12,8 @@ sealed class PluviaScreen(val route: String) {
         fun route(id: Long) = "chat/$id"
         const val ARG_ID = "id"
     }
+    data object Workshop : PluviaScreen("workshop/{appId}") {
+        fun route(appId: Int) = "workshop/$appId"
+        const val ARG_APP_ID = "appId"
+    }
 }

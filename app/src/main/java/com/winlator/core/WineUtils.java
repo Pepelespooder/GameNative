@@ -28,6 +28,12 @@ public abstract class WineUtils {
         FileUtils.symlink("../drive_c", dosdevicesPath+"/c:");
         FileUtils.symlink(container.getRootDir().getPath() + "/../..", dosdevicesPath+"/z:");
 
+        // P: drive — clean path (no spaces/parens) for workshop mod content.
+        // Wine's FindFirstFileW can enumerate files here without the (x86) bug.
+        String modsBase = container.getRootDir().getPath() + "/workshopmods";
+        (new File(modsBase)).mkdirs();
+        FileUtils.symlink(modsBase, dosdevicesPath + "/p:");
+
 
         // Auto-fix containers missing D: and E: drives
         String currentDrives = container.getDrives();

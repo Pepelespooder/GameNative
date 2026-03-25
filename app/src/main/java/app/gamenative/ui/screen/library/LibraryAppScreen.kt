@@ -717,7 +717,7 @@ internal fun AppScreenContent(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(top = 128.dp, start = 20.dp, end = 20.dp, bottom = 16.dp),
+                        .padding(top = 72.dp, start = 20.dp, end = 20.dp, bottom = 16.dp),
                 ) {
                     // Game title
                     Text(

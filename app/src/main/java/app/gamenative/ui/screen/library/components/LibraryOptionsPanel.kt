@@ -39,6 +39,7 @@ import androidx.compose.material.icons.filled.PhotoAlbum
 import androidx.compose.material.icons.filled.PhotoSizeSelectActual
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.SortByAlpha
+import androidx.compose.material.icons.filled.NewReleases
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.ViewCarousel
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -356,4 +357,5 @@ private fun SortOption.icon(): ImageVector = when (this) {
     SortOption.RECENTLY_PLAYED -> Icons.Default.Schedule
     SortOption.SIZE_SMALLEST -> Icons.Default.Compress
     SortOption.SIZE_LARGEST -> Icons.Default.Storage
+    SortOption.RECENTLY_ADDED -> Icons.Default.NewReleases
 }

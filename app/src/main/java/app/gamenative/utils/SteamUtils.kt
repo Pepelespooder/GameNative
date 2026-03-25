@@ -1431,5 +1431,72 @@ object SteamUtils {
             Timber.e(e, "Failed to generate achievements for $appId")
         }
     }
+
+    /**
+     * Returns true if [appId] has Steam Workshop support.
+     *
+     * Steam's store API (category 30) is the primary check but has known data gaps —
+     * e.g. Darkest Dungeon (262060) has ~8,000 workshop items but category 30 is absent.
+     * Fallback: follow the community workshop hub URL; if the final URL still ends with
+     * "/workshop/" the app has a real workshop hub (redirects away for games without one).
+     *
+     * Result is cached in <filesDir>/workshop_support_<appId>.flag as "1" or "0".
+     */
+    fun hasWorkshopSupport(context: Context, appId: Int): Boolean {
+        val cacheFile = File(context.filesDir, "workshop_support_v3_$appId.flag")
+        // Only trust a cached positive result — negatives may be due to transient network
+        // failures and should be rechecked each session.
+        if (cacheFile.exists() && cacheFile.readText().trim() == "1") return true
+
+        val supported = checkCategoryApi(appId) || checkWorkshopHubRedirect(appId)
+        if (supported) cacheFile.writeText("1")
+        return supported
+    }
+
+    private fun checkCategoryApi(appId: Int): Boolean = try {
+        val url = "https://store.steampowered.com/api/appdetails?appids=$appId&filters=categories"
+        val body = java.net.URL(url).openStream().bufferedReader().use { it.readText() }
+        val categories = JSONObject(body)
+            .optJSONObject(appId.toString())
+            ?.optJSONObject("data")
+            ?.optJSONArray("categories")
+        (0 until (categories?.length() ?: 0)).any { i ->
+            categories?.getJSONObject(i)?.optInt("id") == 30
+        }
+    } catch (e: Exception) {
+        Timber.w(e, "SteamUtils: category API check failed for $appId")
+        false
+    }
+
+    /**
+     * Checks the Steam Community workshop hub URL.
+     * Games with a workshop keep the "/workshop/" path; games without it redirect away.
+     * Manually follows redirects because HttpURLConnection.url doesn't update post-redirect.
+     */
+    private fun checkWorkshopHubRedirect(appId: Int): Boolean = try {
+        var url = "https://steamcommunity.com/app/$appId/workshop/"
+        val maxRedirects = 5
+        repeat(maxRedirects) {
+            val conn = java.net.URL(url).openConnection() as java.net.HttpURLConnection
+            conn.instanceFollowRedirects = false
+            conn.connectTimeout = 8_000
+            conn.readTimeout = 8_000
+            conn.requestMethod = "GET"
+            conn.setRequestProperty("User-Agent", "Mozilla/5.0")
+            val code = conn.responseCode
+            val location = conn.getHeaderField("Location")
+            conn.disconnect()
+            if (code in 300..399 && location != null) {
+                url = if (location.startsWith("http")) location
+                      else "https://steamcommunity.com$location"
+            } else {
+                return@repeat
+            }
+        }
+        url.contains("/workshop/", ignoreCase = true)
+    } catch (e: Exception) {
+        Timber.w(e, "SteamUtils: workshop hub redirect check failed for $appId")
+        false
+    }
 }
 

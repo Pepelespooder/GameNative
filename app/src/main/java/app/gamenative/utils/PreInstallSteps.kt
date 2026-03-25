@@ -105,7 +105,7 @@ object PreInstallSteps {
     }
 
     private fun getGameDir(container: Container): File? {
-        for (drive in Container.drivesIterator(container.drives)) {
+        for (drive in container.drivesIterator()) {
             if (drive[0].equals("A", ignoreCase = true)) return File(drive[1])
         }
         return null

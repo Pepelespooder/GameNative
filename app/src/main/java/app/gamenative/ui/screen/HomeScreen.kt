@@ -3,14 +3,8 @@ package app.gamenative.ui.screen
 import android.content.res.Configuration
 import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import app.gamenative.ui.enums.HomeDestination
 import app.gamenative.ui.model.HomeViewModel
 import app.gamenative.ui.screen.library.HomeLibraryScreen
 import app.gamenative.ui.theme.PluviaTheme
@@ -18,6 +12,7 @@ import app.gamenative.ui.theme.PluviaTheme
 @Composable
 fun HomeScreen(
     viewModel: HomeViewModel = hiltViewModel(),
+    onNavigateToWorkshop: (Int) -> Unit,
     onChat: (Long) -> Unit,
     onClickExit: () -> Unit,
     onClickPlay: (String, Boolean) -> Unit,
@@ -25,10 +20,9 @@ fun HomeScreen(
     onLogout: () -> Unit,
     onNavigateRoute: (String) -> Unit,
     onGoOnline: () -> Unit,
+    onEditContainer: (String) -> Unit,
     isOffline: Boolean = false
 ) {
-    val homeState by viewModel.homeState.collectAsStateWithLifecycle()
-
     // Pressing back while logged in, confirm we want to close the app.
     BackHandler {
         onClickExit()
@@ -45,18 +39,12 @@ fun HomeScreen(
     )
 }
 
-@Preview(uiMode = Configuration.UI_MODE_NIGHT_YES or Configuration.UI_MODE_TYPE_NORMAL)
-@Preview(
-    uiMode = Configuration.UI_MODE_NIGHT_YES or Configuration.UI_MODE_TYPE_NORMAL,
-    device = "spec:width=1080px,height=1920px,dpi=440,orientation=landscape",
-)
+@Preview(showBackground = true, uiMode = Configuration.UI_MODE_NIGHT_YES)
 @Composable
-private fun Preview_HomeScreenContent() {
+private fun Preview_HomeScreen() {
     PluviaTheme {
-        var destination: HomeDestination by remember {
-            mutableStateOf(HomeDestination.Library)
-        }
         HomeScreen(
+            onNavigateToWorkshop = {},
             onChat = {},
             onClickPlay = { _, _ -> },
             onTestGraphics = { },
@@ -64,6 +52,7 @@ private fun Preview_HomeScreenContent() {
             onNavigateRoute = {},
             onClickExit = {},
             onGoOnline = {},
+            onEditContainer = {},
         )
     }
 }

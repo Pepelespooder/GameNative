@@ -11,6 +11,7 @@ import app.gamenative.service.gog.GOGConstants
 import app.gamenative.service.gog.GOGService
 import app.gamenative.utils.BestConfigService
 import app.gamenative.utils.CustomGameScanner
+import app.gamenative.utils.WorkshopEnvironmentSetup
 import com.winlator.container.Container
 import com.winlator.container.ContainerData
 import com.winlator.container.ContainerManager
@@ -296,6 +297,8 @@ object ContainerUtils {
             steamOfflineMode = container.isSteamOfflineMode(),
             useLegacyDRM = container.isUseLegacyDRM(),
             unpackFiles = container.isUnpackFiles(),
+            workshopMods = container.isWorkshopMods(),
+            workshopLocalOnly = container.isWorkshopLocalOnly(),
             suspendPolicy = container.suspendPolicy,
             portraitMode = container.isPortraitMode,
             enableXInput = enableX,
@@ -382,6 +385,8 @@ object ContainerUtils {
                 "useLegacyDRM" -> value?.let { updatedData.copy(useLegacyDRM = it as? Boolean ?: updatedData.useLegacyDRM) } ?: updatedData
                 "steamOfflineMode" -> value?.let { updatedData.copy(steamOfflineMode = it as? Boolean ?: updatedData.steamOfflineMode) } ?: updatedData
                 "unpackFiles" -> value?.let { updatedData.copy(unpackFiles = it as? Boolean ?: updatedData.unpackFiles) } ?: updatedData
+                "workshopMods" -> value?.let { updatedData.copy(workshopMods = it as? Boolean ?: updatedData.workshopMods) } ?: updatedData
+                "workshopLocalOnly" -> value?.let { updatedData.copy(workshopLocalOnly = it as? Boolean ?: updatedData.workshopLocalOnly) } ?: updatedData
                 "suspendPolicy" -> value?.let { updatedData.copy(suspendPolicy = it as? String ?: updatedData.suspendPolicy) } ?: updatedData
                 "envVars" -> value?.let { updatedData.copy(envVars = it as? String ?: updatedData.envVars) } ?: updatedData
                 "cpuList" -> value?.let { updatedData.copy(cpuList = it as? String ?: updatedData.cpuList) } ?: updatedData
@@ -474,8 +479,14 @@ object ContainerUtils {
         container.setForceDlc(containerData.forceDlc)
         container.setLocalSavesOnly(containerData.localSavesOnly)
         container.setSteamOfflineMode(containerData.steamOfflineMode)
+        // Write HKLM Steam registry keys so 32-bit games can find steamapps
+        if (extractGameSourceFromContainerId(container.id) == GameSource.STEAM) {
+            WorkshopEnvironmentSetup.setupRegistry(container)
+        }
         container.setUseLegacyDRM(containerData.useLegacyDRM)
         container.setUnpackFiles(containerData.unpackFiles)
+        container.setWorkshopMods(containerData.workshopMods)
+        container.setWorkshopLocalOnly(containerData.workshopLocalOnly)
         container.setSuspendPolicy(containerData.suspendPolicy)
         container.setPortraitMode(containerData.portraitMode)
         if (previousUnpackFiles != containerData.unpackFiles && containerData.unpackFiles) {
@@ -582,11 +593,20 @@ object ContainerUtils {
 
     fun getContainer(context: Context, appId: String): Container {
         val containerManager = ContainerManager(context)
-        return if (containerManager.hasContainer(appId)) {
-            containerManager.getContainerById(appId)
-        } else {
-            throw Exception("Container does not exist for game $appId")
+        if (containerManager.hasContainer(appId)) {
+            return containerManager.getContainerById(appId)
         }
+        // Container directory exists but .container config is missing — write defaults and reload
+        val rootDir = ImageFs.find(context).getRootDir()
+        val containerDir = File(rootDir, "home/${ImageFs.USER}-$appId")
+        if (containerDir.exists()) {
+            Timber.w("ContainerUtils: .container missing for $appId, writing defaults")
+            val container = com.winlator.container.Container(appId)
+            container.setRootDir(containerDir)
+            container.saveData()
+            return container
+        }
+        throw Exception("Container does not exist for game $appId")
     }
 
     private fun createNewContainer(
@@ -956,7 +976,7 @@ object ContainerUtils {
         if (gameFolderPath != null) {
             // Check if A: drive is already mapped to the correct path
             var hasCorrectADrive = false
-            for (drive in Container.drivesIterator(container.drives)) {
+            for (drive in container.drivesIterator()) {
                 if (drive[0] == "A" && drive[1] == gameFolderPath) {
                     hasCorrectADrive = true
                     break
@@ -971,7 +991,7 @@ object ContainerUtils {
                 drivesBuilder.append("A:$gameFolderPath")
 
                 // Add all other drives (excluding A:)
-                for (drive in Container.drivesIterator(currentDrives)) {
+                for (drive in container.drivesIterator()) {
                     if (drive[0] != "A") {
                         drivesBuilder.append("${drive[0]}:${drive[1]}")
                     }

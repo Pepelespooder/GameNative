@@ -396,15 +396,16 @@ class MainActivity : ComponentActivity() {
             SteamService.keepAlive,
             SteamService.isImporting,
         )
-        // stop SteamService only if no downloads or sync are in progress
+        // stop SteamService only if no downloads or sync are in progress and user is not logged in
         if (!isChangingConfigurations &&
             SteamService.isConnected &&
+            !SteamService.isLoggedIn &&
             !SteamService.hasActiveOperations() &&
             !SteamService.isLoginInProgress &&
             !SteamService.keepAlive &&
             !SteamService.isImporting
         ) {
-            Timber.i("Stopping SteamService - no active operations")
+            Timber.i("Stopping SteamService - no active operations and not logged in")
             SteamService.stop()
         }
 

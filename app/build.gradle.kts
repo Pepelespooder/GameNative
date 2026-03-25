@@ -216,8 +216,8 @@ dependencies {
     // JavaSteam
     val localBuild = false // Change to 'true' needed when building JavaSteam manually
     if (localBuild) {
-        implementation(files("../../JavaSteam/build/libs/javasteam-1.8.0-12-SNAPSHOT.jar"))
-        implementation(files("../../JavaSteam/javasteam-depotdownloader/build/libs/javasteam-depotdownloader-1.8.0-12-SNAPSHOT.jar"))
+        implementation(files("../../../JavaSteam/build/libs/javasteam-1.8.1-SNAPSHOT.jar"))
+        implementation(files("../../../JavaSteam/javasteam-depotdownloader/build/libs/javasteam-depotdownloader-1.8.1-SNAPSHOT.jar"))
         implementation(libs.bundles.javasteam.dev)
     } else {
         implementation(libs.javasteam) {
@@ -253,6 +253,7 @@ dependencies {
     implementation(libs.kotlin.coroutines)
     implementation(libs.timber)
     implementation(libs.zxing)
+    implementation(libs.orgJson)
 
     // Google Protobufs
     implementation(libs.protobuf.java)
@@ -283,8 +284,10 @@ dependencies {
     testImplementation(libs.mockk)
     testImplementation(libs.androidx.ui.test.junit4)
     testImplementation(libs.zstd.jni)
+    testImplementation(libs.junit)
     testImplementation(libs.orgJson)
     testImplementation(libs.mockwebserver)
+
 
     // Add PostHog Android SDK dependency
     implementation("com.posthog:posthog-android:3.8.0")

@@ -633,6 +633,12 @@
     <string name="use_legacy_drm">Use Legacy DRM</string>
     <string name="unpack_files">Unpack Files</string>
     <string name="unpack_files_description">Only use if you get \'Application Load Error 3:0000065432\'.</string>
+    <string name="workshop_mods">Enable Workshop Mods</string>
+    <string name="workshop_mods_description">Download and configure subscribed Steam Workshop mods before game launch</string>
+    <string name="workshop_local_only">Local Only</string>
+    <string name="workshop_local_only_description">Only use mods downloaded via Browse Workshop. Skip fetching Steam subscriptions on launch</string>
+    <string name="delete_workshop_mods">Delete Workshop Mods</string>
+    <string name="delete_workshop_mods_confirm">This will delete all downloaded workshop mods and their symlinks for this game. You will need to re-download them if you enable workshop mods again. Continue?</string>
     <string name="force_dlc">Force DLC</string>
     <string name="force_dlc_description">Only enable if DLCs are not detected or saves with DLC are not working</string>
     <string name="local_saves_only">Local saves only</string>
@@ -1099,6 +1105,7 @@
     <string name="sort_recently_played">Recently Played</string>
     <string name="sort_size_smallest">Size (Smallest)</string>
     <string name="sort_size_largest">Size (Largest)</string>
+    <string name="sort_recently_added">Recently Added</string>
 
     <!-- Game Options Panel -->
     <string name="game_options_title">Options</string>
@@ -1299,4 +1306,34 @@
     <string name="library_source_not_logged_in_amazon">Sign in to access your Amazon library.</string>
     <string name="library_source_no_custom_games">You have not added any custom games.</string>
     <string name="select_branch">Select branch</string>
+    <string name="workshop_container_not_installed">Run the game at least once before accessing Workshop.</string>
+    <string name="workshop_title">Workshop</string>
+    <string name="workshop_search_placeholder">Search mods…</string>
+    <string name="workshop_tab_browse">Browse</string>
+    <string name="workshop_tab_installed">Installed</string>
+    <string name="workshop_tab_updates">Updates</string>
+    <string name="workshop_no_results">Loading or no results...</string>
+    <string name="workshop_no_installed">No installed mods</string>
+    <string name="workshop_no_updates">No updates available</string>
+    <string name="workshop_check_for_updates">Check for Updates</string>
+    <string name="workshop_update_all">Update All (%1$d)</string>
+    <string name="workshop_item_unnamed">Unnamed</string>
+    <string name="workshop_item_unknown">Item #%1$d</string>
+    <string name="workshop_detail_fallback_title">Workshop Item</string>
+    <string name="workshop_btn_subscribe">Subscribe</string>
+    <string name="workshop_btn_installed">Installed</string>
+    <string name="workshop_btn_downloading">Downloading…</string>
+    <string name="workshop_btn_downloading_short">Downloading</string>
+    <string name="workshop_btn_update">Update</string>
+    <string name="workshop_btn_retry">Retry</string>
+    <string name="workshop_btn_remove">Remove</string>
+    <string name="workshop_stat_subscribers">Subscribers</string>
+    <string name="workshop_stat_favorites">Favorites</string>
+    <string name="workshop_stat_views">Views</string>
+    <string name="workshop_stat_size">Size</string>
+    <string name="workshop_stat_posted">Posted</string>
+    <string name="workshop_stat_updated">Updated</string>
+    <string name="workshop_label_description">Description</string>
+    <string name="workshop_label_update_available">UPDATE AVAILABLE</string>
+    <string name="workshop_label_failed">FAILED</string>
 </resources>

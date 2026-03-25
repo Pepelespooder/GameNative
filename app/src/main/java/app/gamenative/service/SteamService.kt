@@ -302,6 +302,9 @@ class SteamService : Service(), IChallengeUrlChanged {
 
         internal var instance: SteamService? = null
 
+        val licenses: List<License>
+            get() = instance?.licenses ?: emptyList()
+
         var cachedAchievements: List<app.gamenative.statsgen.Achievement>? = null
             private set
         var cachedAchievementsAppId: Int? = null
@@ -623,10 +626,6 @@ class SteamService : Service(), IChallengeUrlChanged {
             return mainAppDlcIds
         }
 
-        suspend fun updateLastPlayed(appId: Int, lastPlayed: Long) {
-            instance?.appDao?.updateLastPlayed(appId, lastPlayed)
-        }
-
         /**
          * Refresh the owned games list by querying Steam, diffing with the local DB, and
          * queueing PICS requests for anything new so metadata gets populated.
@@ -645,10 +644,14 @@ class SteamService : Service(), IChallengeUrlChanged {
                     return@runCatching 0
                 }
 
-                // Update last played timestamps and playtime for all owned games
+                // Update playtime and last-played for all known apps
                 ownedGames.forEach { game ->
-                    if (game.rtimeLastPlayed > 0 || game.playtimeForever > 0) {
-                        service.appDao.updatePlayStats(game.appId, game.rtimeLastPlayed.toLong(), game.playtimeForever)
+                    if (game.appId > 0 && (game.rtimeLastPlayed > 0 || game.playtimeForever > 0)) {
+                        service.appDao.updatePlaytime(
+                            appId = game.appId,
+                            lastPlayed = game.rtimeLastPlayed.toLong() * 1000L,
+                            playtimeForever = game.playtimeForever,
+                        )
                     }
                 }
 
@@ -1098,9 +1101,9 @@ class SteamService : Service(), IChallengeUrlChanged {
                 } else {
                     PrefManager.containerLanguage
                 }
-
                 val branch = container?.getExtra("branch", "public") ?: "public"
-                Timber.tag("SteamService").d("downloadApp: appId=$appId language=$containerLanguage branch=$branch")
+
+                Timber.tag("SteamService").d("downloadApp: downloading app $appId with language $containerLanguage, branch $branch")
 
                 val depots = getDownloadableDepots(appId = appId, preferredLanguage = containerLanguage)
                 downloadApp(
@@ -1607,7 +1610,6 @@ class SteamService : Service(), IChallengeUrlChanged {
                             val mainAppItem = AppItem(
                                 appId,
                                 installDirectory = getAppDirPath(appId),
-                                branch = branch,
                                 depot = mainAppDepotIds,
                             )
 
@@ -1623,7 +1625,6 @@ class SteamService : Service(), IChallengeUrlChanged {
                             val dlcAppItem = AppItem(
                                 dlcAppId,
                                 installDirectory = getAppDirPath(appId),
-                                branch = branch,
                                 depot = dlcDepotIds
                             )
 
@@ -3304,6 +3305,9 @@ class SteamService : Service(), IChallengeUrlChanged {
                 picsChangesCheckerJob = continuousPICSChangesChecker()
                 picsGetProductInfoJob = continuousPICSGetProductInfo()
 
+                // Sync playtime and last-played timestamps from Steam
+                scope.launch { refreshOwnedGamesFromServer() }
+
                 // Tell steam we're online, this allows friends to update.
                 _steamFriends?.setPersonaState(PrefManager.personaState)
 
@@ -3374,7 +3378,7 @@ class SteamService : Service(), IChallengeUrlChanged {
         scope.launch {
             db.withTransaction {
                 // Send off an event if we change states.
-                if (callback.friendId == steamClient?.steamID) {
+                if (callback.friendId == steamClient!!.steamID) {
                     Timber.d("Local persona state received: ${callback.playerName}")
 
                     val avatarHash = callback.avatarHash.toHexString()

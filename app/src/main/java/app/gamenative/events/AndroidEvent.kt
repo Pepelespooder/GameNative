@@ -27,4 +27,5 @@ interface AndroidEvent<T> : Event<T> {
     data class EpicAuthCodeReceived(val authCode: String) : AndroidEvent<Unit>
     data object ServiceReady : AndroidEvent<Unit>
     // data class SetAppBarVisibility(val visible: Boolean) : AndroidEvent<Unit>
+    data class NavigateWorkshop(val appId: Int) : AndroidEvent<Unit>
 }

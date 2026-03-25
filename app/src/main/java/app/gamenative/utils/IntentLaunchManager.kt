@@ -118,6 +118,18 @@ object IntentLaunchManager {
         }
     }
 
+    fun persistConfigurationOverride(context: Context, appId: String) {
+        try {
+            val effectiveConfig = getEffectiveContainerConfig(context, appId)
+            if (effectiveConfig != null && ContainerUtils.hasContainer(context, appId)) {
+                ContainerUtils.applyToContainer(context, appId, effectiveConfig)
+                Timber.i("[IntentLaunchManager]: Persisted configuration override for app $appId")
+            }
+        } catch (e: Exception) {
+            Timber.e(e, "[IntentLaunchManager]: Failed to persist configuration override for app $appId")
+        }
+    }
+
     fun clearTemporaryOverride(appId: String) {
         TemporaryConfigStore.clearOverride(appId)
         Timber.d("[IntentLaunchManager]: Cleared temporary config override for app $appId")

@@ -67,32 +67,35 @@ interface SteamAppDao {
             while (true) {
                 try {
                     val page = _getOwnedAppsPage(pageSize, offset, invalidPkgId)
-                    result.addAll(page)
+                    if (page.isEmpty()) return result
+                    result += page
+                    if (pageSize == Int.MAX_VALUE) return result // got everything in one shot
                     offset += page.size
-                    if (page.size < pageSize) return result
                     break
                 } catch (e: android.database.sqlite.SQLiteBlobTooBigException) {
-                    if (pageSize <= 1) throw e
-                    pageSize /= 2 // back off and try again with smaller window
+                    if (pageSize <= 1) throw e // single row exceeds window, can't recover
+                    pageSize = if (pageSize == Int.MAX_VALUE) PAGE_SIZE else (pageSize / 2).coerceAtLeast(1)
                 }
             }
         }
     }
 
-    /**
-     * Emits the full list of owned Steam apps, using paging to avoid [SQLiteBlobTooBigException]
-     * crashes on large libraries.
-     */
+    // emits full list on count changes, loaded in pages to avoid CursorWindow overflow.
+    // property-only updates (name, icon) won't re-emit until the next count change.
     @OptIn(ExperimentalCoroutinesApi::class)
-    fun observeOwnedApps(invalidPkgId: Int = INVALID_PKG_ID): Flow<List<SteamApp>> {
-        return _observeOwnedAppCount(invalidPkgId)
-            .distinctUntilChanged()
-            .flatMapLatest {
-                flow {
-                    emit(_getAllOwnedAppsPaged(invalidPkgId))
-                }
-            }
-    }
+    fun getAllOwnedApps(
+        invalidPkgId: Int = INVALID_PKG_ID,
+    ): Flow<List<SteamApp>> = _observeOwnedAppCount(invalidPkgId)
+        .distinctUntilChanged() // skip reload when count unchanged
+        .flatMapLatest { // cancel stale reloads during rapid PICS inserts
+            flow { emit(_getAllOwnedAppsPaged(invalidPkgId)) }
+        }
+
+    @Query("SELECT * FROM steam_app WHERE received_pics = 0 AND package_id != :invalidPkgId AND owner_account_id = :ownerId")
+    fun getAllOwnedAppsWithoutPICS(
+        ownerId: Int,
+        invalidPkgId: Int = INVALID_PKG_ID,
+    ): List<SteamApp>
 
     @Query("SELECT * FROM steam_app WHERE id = :appId")
     suspend fun findApp(appId: Int): SteamApp?
@@ -121,9 +124,6 @@ interface SteamAppDao {
     @Query("SELECT id FROM steam_app")
     suspend fun getAllAppIds(): List<Int>
 
-    @Query("UPDATE steam_app SET last_played = :lastPlayed WHERE id = :appId")
-    suspend fun updateLastPlayed(appId: Int, lastPlayed: Long)
-
-    @Query("UPDATE steam_app SET last_played = :lastPlayed, playtime_forever = :playtimeMinutes WHERE id = :appId")
-    suspend fun updatePlayStats(appId: Int, lastPlayed: Long, playtimeMinutes: Int)
+    @Query("UPDATE steam_app SET last_played = :lastPlayed, playtime_forever = :playtimeForever WHERE id = :appId")
+    suspend fun updatePlaytime(appId: Int, lastPlayed: Long, playtimeForever: Int)
 }
