@@ -1,6 +1,7 @@
 package app.gamenative.ui.enums
 
 enum class AppOptionMenuType(val text: String) {
+    Workshop("Workshop"),
     StorePage("Open store page"),
     CreateShortcut("Create shortcut"),
     ExportFrontend("Export for frontend"),

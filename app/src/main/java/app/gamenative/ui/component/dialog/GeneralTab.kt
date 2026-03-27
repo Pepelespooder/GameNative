@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -15,10 +16,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.KeyboardType
@@ -26,24 +30,36 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.gamenative.R
 import app.gamenative.ui.component.settings.SettingsListDropdown
+import app.gamenative.ui.util.SnackbarManager
 import com.alorma.compose.settings.ui.SettingsSwitch
 import app.gamenative.ui.theme.settingsTileColors
 import app.gamenative.ui.theme.settingsTileColorsAlt
 import com.alorma.compose.settings.ui.SettingsGroup
+import com.alorma.compose.settings.ui.SettingsMenuLink
+import app.gamenative.service.SteamService
+import app.gamenative.workshop.WorkshopSyncManager
 import com.winlator.container.Container
 import com.winlator.container.ContainerData
 import com.winlator.core.DefaultVersion
 import com.winlator.core.KeyValueSet
 import com.winlator.core.StringUtils
 import com.winlator.contents.ContentProfile
+import java.io.File
 import java.util.Locale
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @Composable
 fun GeneralTabContent(
     state: ContainerConfigState,
     nonzeroResolutionError: String,
     aspectResolutionError: String,
+    default: Boolean = false,
+    containerAppId: String? = null,
 ) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val config = state.config.value
     val graphicsDrivers = state.graphicsDrivers.value
     val glibcWineEntries = state.glibcWineEntries.value
@@ -58,6 +74,7 @@ fun GeneralTabContent(
         config.suspendPolicy.equals(Container.SUSPEND_POLICY_NEVER, ignoreCase = true) -> 2
         else -> 1
     }
+    var showDeleteWorkshopDataDialog by remember(containerAppId) { mutableStateOf(false) }
 
     if (state.showCustomResolutionDialog.value) {
         AlertDialog(
@@ -124,6 +141,62 @@ fun GeneralTabContent(
                     Text(text = stringResource(R.string.cancel))
                 }
             }
+        )
+    }
+
+    if (showDeleteWorkshopDataDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteWorkshopDataDialog = false },
+            title = { Text(text = stringResource(R.string.delete_steam_workshop_data)) },
+            text = {
+                Text(text = stringResource(R.string.delete_steam_workshop_data_description))
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showDeleteWorkshopDataDialog = false
+                        val appId = containerAppId ?: return@TextButton
+                        scope.launch {
+                            runCatching {
+                                withContext(Dispatchers.IO) {
+                                    val container = app.gamenative.utils.ContainerUtils.getOrCreateContainer(context, appId)
+                                    val steamAppId = appId.removePrefix("STEAM_").toIntOrNull()
+                                        ?: error("Invalid Steam app id")
+                                    val winePrefix = container.rootDir.absolutePath + "/.wine"
+                                    val workshopContentDir = WorkshopSyncManager.getWorkshopContentDir(winePrefix, steamAppId)
+                                    val gameRootDir = File(SteamService.getAppDirPath(steamAppId))
+                                    WorkshopSyncManager.clearWorkshopData(
+                                        gameRootDir = gameRootDir,
+                                        workshopContentDir = workshopContentDir,
+                                        winePrefix = winePrefix,
+                                        gameName = SteamService.getAppInfoOf(steamAppId)?.name ?: "",
+                                    )
+                                    container.putExtra("workshopEnabled", false)
+                                    container.putExtra("localOnlyMods", false)
+                                    container.saveData()
+                                }
+                            }.onSuccess {
+                                state.config.value = state.config.value.copy(
+                                    workshopEnabled = false,
+                                    localOnlyMods = false,
+                                )
+                                SnackbarManager.show(context.getString(R.string.delete_steam_workshop_data_success))
+                            }.onFailure {
+                                SnackbarManager.show(it.message ?: context.getString(R.string.delete_steam_workshop_data_failed))
+                            }
+                        }
+                    },
+                ) {
+                    Text(text = stringResource(R.string.delete))
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showDeleteWorkshopDataDialog = false },
+                ) {
+                    Text(text = stringResource(R.string.cancel))
+                }
+            },
         )
     }
 
@@ -320,13 +393,44 @@ fun GeneralTabContent(
             state = config.forceDlc,
             onCheckedChange = { state.config.value = config.copy(forceDlc = it) },
         )
-//        SettingsSwitch(
-//            colors = settingsTileColorsAlt(),
-//            title = { Text(text = stringResource(R.string.local_saves_only)) },
-//            subtitle = { Text(text = stringResource(R.string.local_saves_only_description)) },
-//            state = config.localSavesOnly,
-//            onCheckedChange = { state.config.value = config.copy(localSavesOnly = it) },
-//        )
+        SettingsSwitch(
+            colors = settingsTileColorsAlt(),
+            title = { Text(text = stringResource(R.string.local_saves_only)) },
+            subtitle = { Text(text = stringResource(R.string.local_saves_only_description)) },
+            state = config.localSavesOnly,
+            onCheckedChange = { state.config.value = config.copy(localSavesOnly = it) },
+        )
+        if (!default && containerAppId?.startsWith("STEAM_") == true) {
+            SettingsSwitch(
+                colors = settingsTileColorsAlt(),
+                title = { Text(text = stringResource(R.string.enable_workshop)) },
+                subtitle = { Text(text = stringResource(R.string.enable_workshop_description)) },
+                state = config.workshopEnabled,
+                onCheckedChange = { state.config.value = config.copy(workshopEnabled = it) },
+            )
+        }
+        SettingsSwitch(
+            colors = settingsTileColorsAlt(),
+            title = { Text(text = stringResource(R.string.local_only_mods)) },
+            subtitle = { Text(text = stringResource(R.string.local_only_mods_description)) },
+            state = config.localOnlyMods,
+            onCheckedChange = { state.config.value = config.copy(localOnlyMods = it) },
+        )
+        if (!default && containerAppId?.startsWith("STEAM_") == true) {
+            SettingsMenuLink(
+                colors = settingsTileColors(),
+                title = {
+                    Text(
+                        text = stringResource(R.string.delete_steam_workshop_data),
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                },
+                subtitle = {
+                    Text(text = stringResource(R.string.delete_steam_workshop_data_subtitle))
+                },
+                onClick = { showDeleteWorkshopDataDialog = true },
+            )
+        }
         SettingsSwitch(
             colors = settingsTileColorsAlt(),
             title = { Text(text = stringResource(R.string.use_legacy_drm)) },

@@ -113,6 +113,8 @@ object ContainerUtils {
             containerVariant = PrefManager.containerVariant,
             forceDlc = PrefManager.forceDlc,
             localSavesOnly = PrefManager.localSavesOnly,
+            workshopEnabled = false,
+            localOnlyMods = false,
             steamOfflineMode = PrefManager.steamOfflineMode,
             useLegacyDRM = PrefManager.useLegacyDRM,
             unpackFiles = PrefManager.unpackFiles,
@@ -293,6 +295,8 @@ object ContainerUtils {
             useSteamInput = useSteamInput,
             forceDlc = container.isForceDlc,
             localSavesOnly = container.isLocalSavesOnly,
+            workshopEnabled = container.getExtra("workshopEnabled", "false").toBoolean(),
+            localOnlyMods = container.getExtra("localOnlyMods", "false").toBoolean(),
             steamOfflineMode = container.isSteamOfflineMode(),
             useLegacyDRM = container.isUseLegacyDRM(),
             unpackFiles = container.isUnpackFiles(),
@@ -379,6 +383,8 @@ object ContainerUtils {
                 "fexcorePreset" -> value?.let { updatedData.copy(fexcorePreset = it as? String ?: updatedData.fexcorePreset) }
                     ?: updatedData
                 "useLegacyDRM" -> value?.let { updatedData.copy(useLegacyDRM = it as? Boolean ?: updatedData.useLegacyDRM) } ?: updatedData
+                "workshopEnabled" -> value?.let { updatedData.copy(workshopEnabled = it as? Boolean ?: updatedData.workshopEnabled) } ?: updatedData
+                "localOnlyMods" -> value?.let { updatedData.copy(localOnlyMods = it as? Boolean ?: updatedData.localOnlyMods) } ?: updatedData
                 "steamOfflineMode" -> value?.let { updatedData.copy(steamOfflineMode = it as? Boolean ?: updatedData.steamOfflineMode) } ?: updatedData
                 "unpackFiles" -> value?.let { updatedData.copy(unpackFiles = it as? Boolean ?: updatedData.unpackFiles) } ?: updatedData
                 "suspendPolicy" -> value?.let { updatedData.copy(suspendPolicy = it as? String ?: updatedData.suspendPolicy) } ?: updatedData
@@ -472,6 +478,8 @@ object ContainerUtils {
         container.setExternalDisplaySwap(containerData.externalDisplaySwap)
         container.setForceDlc(containerData.forceDlc)
         container.setLocalSavesOnly(containerData.localSavesOnly)
+        container.putExtra("workshopEnabled", containerData.workshopEnabled)
+        container.putExtra("localOnlyMods", containerData.localOnlyMods)
         container.setSteamOfflineMode(containerData.steamOfflineMode)
         container.setUseLegacyDRM(containerData.useLegacyDRM)
         container.setUnpackFiles(containerData.unpackFiles)
