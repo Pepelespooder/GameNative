@@ -141,6 +141,7 @@ internal fun winComponentsItemTitleRes(string: String): Int {
 fun ContainerConfigDialog(
     visible: Boolean = true,
     default: Boolean = false,
+    containerAppId: String? = null,
     title: String,
     initialConfig: ContainerData = ContainerData(),
     onDismissRequest: () -> Unit,
@@ -1127,7 +1128,15 @@ fun ContainerConfigDialog(
                                 .verticalScroll(scrollState)
                                 .weight(1f),
                         ) {
-                            if (selectedTab == 0) GeneralTabContent(state, nonzeroResolutionError, aspectResolutionError)
+                            if (selectedTab == 0) {
+                                GeneralTabContent(
+                                    state = state,
+                                    nonzeroResolutionError = nonzeroResolutionError,
+                                    aspectResolutionError = aspectResolutionError,
+                                    default = default,
+                                    containerAppId = containerAppId,
+                                )
+                            }
                             if (selectedTab == 1) GraphicsTabContent(state)
                             if (selectedTab == 2) EmulationTabContent(state)
                             if (selectedTab == 3) ControllerTabContent(state, default)

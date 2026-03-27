@@ -316,6 +316,7 @@ private fun OptionItem(
 
 private fun getIconForOption(type: AppOptionMenuType): ImageVector {
     return when (type) {
+        AppOptionMenuType.Workshop -> Icons.Default.Apps
         AppOptionMenuType.StorePage -> Icons.AutoMirrored.Filled.OpenInNew
         AppOptionMenuType.CreateShortcut -> Icons.AutoMirrored.Filled.AddToHomeScreen
         AppOptionMenuType.ExportFrontend -> Icons.Default.Share
@@ -384,6 +385,7 @@ private fun groupOptions(options: List<AppMenuOption>): Map<OptionCategory, List
 
             // Help & Info
             AppOptionMenuType.StorePage,
+            AppOptionMenuType.Workshop,
             AppOptionMenuType.GetSupport,
             AppOptionMenuType.SubmitFeedback,
             AppOptionMenuType.FetchSteamGridDBImages,
