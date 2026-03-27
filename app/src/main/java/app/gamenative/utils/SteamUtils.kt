@@ -168,10 +168,15 @@ object SteamUtils {
         setupLightweightSteamConfig(imageFs, SteamService.userSteamId?.toString())
 
         val rootPath = Paths.get(appDirPath)
+        val rootDir = rootPath.toFile()
+        if (!rootDir.isDirectory) {
+            Timber.w("replaceSteamApi skipped because app dir is not a directory: $appDirPath")
+            return
+        }
         // Get ticket once for all DLLs
         val ticketBase64 = SteamService.instance?.getEncryptedAppTicketBase64(steamAppId)
 
-        rootPath.toFile().walkTopDown().maxDepth(10).forEach { file ->
+        rootDir.walkTopDown().maxDepth(10).forEach { file ->
             val path = file.toPath()
             if (!file.isFile || !path.name.startsWith("steam_api", ignoreCase = true)) return@forEach
 
@@ -764,6 +769,7 @@ object SteamUtils {
 
     fun findSteamApiDllRootFile(file: File, depth: Int): File? {
         if (depth < 0) return null
+        if (!file.isDirectory) return null
         val (files, directories) = file.walkTopDown().maxDepth(1).partition { it.isFile }
 
         val steamApi = files.firstOrNull {
@@ -787,6 +793,10 @@ object SteamUtils {
 
         if (dllRootFile == null) {
             Timber.w("Failed to find steam_api.dll/steam_api64.dll on a Steam game")
+            return
+        }
+        if (!dllRootFile.isDirectory) {
+            Timber.w("Steam DLL root is not a directory: ${dllRootFile.absolutePath}")
             return
         }
 

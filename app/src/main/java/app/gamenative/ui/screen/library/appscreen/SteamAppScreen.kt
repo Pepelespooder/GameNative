@@ -17,6 +17,8 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -50,8 +52,11 @@ import app.gamenative.ui.component.dialog.LoadingDialog
 import app.gamenative.ui.component.dialog.state.MessageDialogState
 import app.gamenative.ui.data.AppMenuOption
 import app.gamenative.ui.data.GameDisplayInfo
+import app.gamenative.ui.data.GameHeaderAction
 import app.gamenative.ui.enums.AppOptionMenuType
 import app.gamenative.ui.enums.DialogType
+import app.gamenative.ui.screen.workshop.WorkshopScreen
+import app.gamenative.service.WorkshopService
 import app.gamenative.utils.ContainerUtils
 import app.gamenative.utils.MarkerUtils
 import app.gamenative.utils.SteamUtils
@@ -139,6 +144,22 @@ class SteamAppScreen : BaseAppScreen() {
 
         fun shouldShowUninstallDialog(appId: String): Boolean {
             return uninstallDialogAppIds.contains(appId)
+        }
+
+        private val workshopScreenAppIds = mutableStateListOf<String>()
+
+        fun showWorkshopScreen(appId: String) {
+            if (!workshopScreenAppIds.contains(appId)) {
+                workshopScreenAppIds.add(appId)
+            }
+        }
+
+        fun hideWorkshopScreen(appId: String) {
+            workshopScreenAppIds.remove(appId)
+        }
+
+        fun shouldShowWorkshopScreen(appId: String): Boolean {
+            return workshopScreenAppIds.contains(appId)
         }
 
         // Shared state for install dialog - map of gameId to MessageDialogState
@@ -760,6 +781,49 @@ class SteamAppScreen : BaseAppScreen() {
         return options
     }
 
+    @Composable
+    override fun getHeaderActions(
+        context: Context,
+        libraryItem: LibraryItem,
+    ): List<GameHeaderAction> {
+        val workshopEnabled = ContainerUtils.getOrCreateContainer(context, libraryItem.appId)
+            .getExtra("workshopEnabled", "false")
+            .toBoolean()
+        if (!workshopEnabled) {
+            return emptyList()
+        }
+
+        val appInfo = remember(libraryItem.gameId) {
+            SteamService.getAppInfoOf(libraryItem.gameId)
+        }
+        var supportsWorkshop by remember(libraryItem.gameId) {
+            mutableStateOf(
+                appInfo?.contentType == 30 ||
+                    appInfo?.launchWithoutWorkshopUpdates == true,
+            )
+        }
+
+        LaunchedEffect(libraryItem.gameId) {
+            if (!supportsWorkshop) {
+                supportsWorkshop = withContext(Dispatchers.IO) {
+                    WorkshopService.supportsWorkshop(libraryItem.gameId)
+                }
+            }
+        }
+
+        if (!supportsWorkshop) {
+            return emptyList()
+        }
+
+        return listOf(
+            GameHeaderAction(
+                icon = Icons.Default.Extension,
+                contentDescription = context.getString(R.string.workshop_entry),
+                onClick = { showWorkshopScreen(libraryItem.appId) },
+            ),
+        )
+    }
+
     override fun loadContainerData(context: Context, libraryItem: LibraryItem): ContainerData {
         val container = ContainerUtils.getOrCreateContainer(context, libraryItem.appId)
         return ContainerUtils.toContainerData(container)
@@ -791,6 +855,14 @@ class SteamAppScreen : BaseAppScreen() {
         val gameId = libraryItem.gameId
         val appInfo = remember(libraryItem.appId) {
             SteamService.getAppInfoOf(gameId)
+        }
+        var showWorkshopScreen by remember { mutableStateOf(shouldShowWorkshopScreen(libraryItem.appId)) }
+
+        LaunchedEffect(libraryItem.appId) {
+            snapshotFlow { shouldShowWorkshopScreen(libraryItem.appId) }
+                .collect { shouldShow ->
+                    showWorkshopScreen = shouldShow
+                }
         }
 
         // Track uninstall dialog state
@@ -1250,6 +1322,15 @@ class SteamAppScreen : BaseAppScreen() {
                     }
                 },
                 onDismissRequest = { hideBranchDialog(gameId) },
+            )
+        }
+
+        if (showWorkshopScreen) {
+            WorkshopScreen(
+                containerAppId = libraryItem.appId,
+                appId = gameId,
+                gameTitle = appInfo?.name ?: libraryItem.name,
+                onBack = { hideWorkshopScreen(libraryItem.appId) },
             )
         }
     }

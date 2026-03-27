@@ -96,6 +96,7 @@ import app.gamenative.ui.component.GamepadActionBar
 import app.gamenative.ui.component.GamepadButton
 import app.gamenative.ui.component.LoadingScreen
 import app.gamenative.ui.data.AppMenuOption
+import app.gamenative.ui.data.GameHeaderAction
 import app.gamenative.ui.data.GameDisplayInfo
 import app.gamenative.ui.enums.AppOptionMenuType
 import app.gamenative.ui.internal.fakeAppInfo
@@ -493,6 +494,7 @@ internal fun AppScreenContent(
     onDeleteDownloadClick: () -> Unit,
     onUpdateClick: () -> Unit,
     onBack: () -> Unit = {},
+    headerActions: List<GameHeaderAction> = emptyList(),
     vararg optionsMenu: AppMenuOption,
 ) {
     val context = LocalContext.current
@@ -836,6 +838,14 @@ internal fun AppScreenContent(
                         }
 
                         // Secondary action icons (right-aligned)
+                        headerActions.forEach { action ->
+                            ActionIconButton(
+                                icon = action.icon,
+                                contentDescription = action.contentDescription,
+                                onClick = action.onClick,
+                            )
+                        }
+
                         ActionIconButton(
                             icon = Icons.Default.Settings,
                             contentDescription = stringResource(R.string.options),

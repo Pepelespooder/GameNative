@@ -30,6 +30,7 @@ import app.gamenative.events.AndroidEvent
 import app.gamenative.ui.component.dialog.ContainerConfigDialog
 import app.gamenative.ui.data.AppMenuOption
 import app.gamenative.ui.data.GameDisplayInfo
+import app.gamenative.ui.data.GameHeaderAction
 import app.gamenative.ui.enums.AppOptionMenuType
 import app.gamenative.ui.util.ContainerConfigTransfer
 import app.gamenative.ui.util.SnackbarManager
@@ -530,6 +531,14 @@ abstract class BaseAppScreen {
     }
 
     @Composable
+    protected open fun getHeaderActions(
+        context: Context,
+        libraryItem: LibraryItem,
+    ): List<GameHeaderAction> {
+        return emptyList()
+    }
+
+    @Composable
     private fun getSubmitFeedbackOption(context: Context, libraryItem: LibraryItem): AppMenuOption {
         return AppMenuOption(
             optionType = AppOptionMenuType.SubmitFeedback,
@@ -953,6 +962,7 @@ abstract class BaseAppScreen {
         }
 
         val optionsMenu = getOptionsMenu(context, libraryItem, onEditContainer, onBack, onClickPlay, onTestGraphics, exportFrontendLauncher)
+        val headerActions = getHeaderActions(context, libraryItem)
 
         // Get download info based on game source for progress tracking
         val downloadInfo = when (libraryItem.gameSource) {
@@ -1016,12 +1026,14 @@ abstract class BaseAppScreen {
                 }
             },
             onBack = onBack,
+            headerActions = headerActions,
             optionsMenu = optionsMenu.toTypedArray(),
         )
 
         // Show container config dialog if needed
         if (showConfigDialog) {
             ContainerConfigDialog(
+                containerAppId = libraryItem.appId,
                 title = "${displayInfo.name} Config",
                 initialConfig = containerData,
                 onDismissRequest = { showConfigDialog = false },
