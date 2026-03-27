@@ -23,6 +23,7 @@ import app.gamenative.db.dao.EpicGameDao
 import app.gamenative.db.dao.AmazonGameDao
 import app.gamenative.service.DownloadService
 import app.gamenative.service.SteamService
+import app.gamenative.service.WorkshopService
 import app.gamenative.service.amazon.AmazonArtwork
 import app.gamenative.service.amazon.AmazonService
 import app.gamenative.service.epic.EpicService
@@ -48,6 +49,7 @@ import kotlin.math.min
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -63,6 +65,9 @@ class LibraryViewModel @Inject constructor(
     private val amazonGameDao: AmazonGameDao,
     @ApplicationContext private val context: Context,
 ) : ViewModel() {
+    companion object {
+        private const val WORKSHOP_SUPPORT_CACHE_VERSION = 2
+    }
 
     private val _state = MutableStateFlow(LibraryState(isLoading = true))
     val state: StateFlow<LibraryState> = _state.asStateFlow()
@@ -95,6 +100,7 @@ class LibraryViewModel @Inject constructor(
 
     // Track debounce job for search
     private var searchDebounceJob: Job? = null
+    private var workshopSupportScanJob: Job? = null
     private val SEARCH_DEBOUNCE_MS = 500L // 500ms debounce
 
     // Cache GPU name to avoid repeated calls
@@ -113,6 +119,9 @@ class LibraryViewModel @Inject constructor(
             "Unknown GPU"
         }
     }
+
+    private val workshopSupportCache = mutableMapOf<Int, Boolean>()
+    private val workshopSupportPending = mutableSetOf<Int>()
 
     init {
         viewModelScope.launch(Dispatchers.IO) {
@@ -412,7 +421,37 @@ class LibraryViewModel @Inject constructor(
                         true
                     }
                 }
+                .filter { item ->
+                    if (!currentState.appInfoSortType.contains(AppFilter.WORKSHOP)) {
+                        true
+                    } else {
+                        when (getCachedWorkshopSupport(item.id)) {
+                            true -> true
+                            false -> false
+                            null -> false
+                        }
+                    }
+                }
                 .toList()
+
+            if (currentState.appInfoSortType.contains(AppFilter.WORKSHOP)) {
+                val candidateIds = appList
+                    .asSequence()
+                    .filter { item -> currentFilter.any { item.type == it } }
+                    .filter { item ->
+                        if (currentState.searchQuery.isNotEmpty()) {
+                            matches(item.name, currentState.searchQuery)
+                        } else {
+                            true
+                        }
+                    }
+                    .map { it.id }
+                    .toList()
+                ensureWorkshopSupportScan(candidateIds)
+            } else {
+                workshopSupportScanJob?.cancel()
+                workshopSupportScanJob = null
+            }
 
             // Filter Steam apps first (no pagination yet)
             // Note: Don't sort individual lists - we'll sort the combined list for consistent ordering
@@ -716,6 +755,59 @@ class LibraryViewModel @Inject constructor(
                     amazonCount = if (currentState.showAmazonInLibrary && AmazonService.hasStoredCredentials(context)) amazonEntries.size else 0,
                     localCount = if (currentState.showCustomGamesInLibrary) customEntries.size else 0,
                 )
+            }
+        }
+    }
+
+    private fun getCachedWorkshopSupport(appId: Int): Boolean? {
+        workshopSupportCache[appId]?.let { return it }
+        val stored = PrefManager.getString("workshop_support_v${WORKSHOP_SUPPORT_CACHE_VERSION}_$appId", "")
+        val parsed = when (stored) {
+            "true" -> true
+            "false" -> false
+            else -> null
+        }
+        if (parsed != null) {
+            workshopSupportCache[appId] = parsed
+        }
+        return parsed
+    }
+
+    private fun cacheWorkshopSupport(appId: Int, supported: Boolean) {
+        workshopSupportCache[appId] = supported
+        PrefManager.setString("workshop_support_v${WORKSHOP_SUPPORT_CACHE_VERSION}_$appId", supported.toString())
+    }
+
+    private fun ensureWorkshopSupportScan(appIds: List<Int>) {
+        val unknownIds = appIds.filter { getCachedWorkshopSupport(it) == null }
+        if (unknownIds.isEmpty()) return
+        if (workshopSupportScanJob?.isActive == true) return
+
+        workshopSupportScanJob = viewModelScope.launch(Dispatchers.IO) {
+            var changed = false
+            for (appId in unknownIds) {
+                if (!isActive || !_state.value.appInfoSortType.contains(AppFilter.WORKSHOP)) break
+
+                val shouldCheck = synchronized(workshopSupportPending) {
+                    workshopSupportPending.add(appId)
+                }
+                if (!shouldCheck) continue
+
+                try {
+                    val supported = runCatching {
+                        WorkshopService.supportsWorkshop(appId)
+                    }.getOrDefault(false)
+                    cacheWorkshopSupport(appId, supported)
+                    changed = true
+                } finally {
+                    synchronized(workshopSupportPending) {
+                        workshopSupportPending.remove(appId)
+                    }
+                }
+            }
+
+            if (changed && _state.value.appInfoSortType.contains(AppFilter.WORKSHOP)) {
+                onFilterApps(paginationCurrentPage)
             }
         }
     }

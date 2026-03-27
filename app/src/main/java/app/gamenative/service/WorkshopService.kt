@@ -154,15 +154,15 @@ object WorkshopService {
 
     suspend fun supportsWorkshop(appId: Int): Boolean = withContext(Dispatchers.IO) {
         val request = Request.Builder()
-            .url("https://steamcommunity.com/app/$appId/workshop/")
+            .url("https://store.steampowered.com/app/$appId/?l=english")
             .get()
             .build()
 
         runCatching {
             Net.http.newCall(request).execute().use { response ->
-                val finalUrl = response.request.url.toString()
-                finalUrl.contains("/app/$appId/workshop") ||
-                    (finalUrl.contains("/workshop/browse") && finalUrl.contains("appid=$appId"))
+                if (!response.isSuccessful) return@use false
+                val body = response.body?.string().orEmpty()
+                body.contains("Steam Workshop", ignoreCase = true)
             }
         }.getOrDefault(false)
     }
