@@ -106,11 +106,27 @@ object PrefManager {
         }
     }
 
+    fun clearWorkshopSupportCache() {
+        scope.launch {
+            dataStore.edit { pref ->
+                pref.asMap().keys
+                    .filter { it.name.startsWith("workshop_support_v") }
+                    .forEach { key ->
+                        @Suppress("UNCHECKED_CAST")
+                        pref.remove(key as Preferences.Key<Any>)
+                    }
+            }
+        }
+    }
+
     fun getBoolean(key: String, defaultValue: Boolean): Boolean =
         getPref(booleanPreferencesKey(key), defaultValue)
 
     fun getString(key: String, defaultValue: String): String =
         getPref(stringPreferencesKey(key), defaultValue)
+
+    fun setString(key: String, value: String): Unit =
+        setPref(stringPreferencesKey(key), value)
 
     fun getFloat(key: String, defaultValue: Float): Float =
         getPref(floatPreferencesKey(key), defaultValue)

@@ -2622,6 +2622,7 @@ class SteamService : Service(), IChallengeUrlChanged {
         }
 
         fun clearDatabase(clearCloudSyncState: Boolean = false) {
+            PrefManager.clearWorkshopSupportCache()
             with(instance!!) {
                 scope.launch {
                     db.withTransaction {

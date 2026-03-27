@@ -60,6 +60,8 @@ object WorkshopSyncManager {
     private const val MAX_PAGES = 50
     private const val COMPLETE_MARKER = ".workshop_complete"
     private const val LOCAL_WORKSHOP_UI_METADATA_FILE = "gamenative_workshop_ui.json"
+    private const val HAYDEE_ROUTE_MARKER = ".gamenative_haydee_workshop"
+    private const val BROTATO_ROUTE_MARKER = ".gamenative_brotato_workshop"
     private var workshopTypesPatched = false
 
     fun getWorkshopContentDir(winePrefix: String, appId: Int): File {
@@ -126,6 +128,7 @@ object WorkshopSyncManager {
                     File(workshopContentDir, "${dir.name}.partial").deleteRecursively()
                 }
             }
+        cleanupBrotatoFlattenedMods(subscribedIds, workshopContentDir)
     }
 
     fun getItemsNeedingSync(
@@ -165,6 +168,66 @@ object WorkshopSyncManager {
         decompressLzmaFiles(workshopContentDir)
         fixFileExtensions(workshopContentDir)
         extractCkmFiles(workshopContentDir)
+        flattenBrotatoWorkshopZips(items, workshopContentDir)
+    }
+
+    private fun flattenBrotatoWorkshopZips(
+        items: List<WorkshopItemSubscription>,
+        workshopContentDir: File,
+    ) {
+        if (items.none { it.appId == 1942280 } && workshopContentDir.name != "1942280") return
+
+        val subscribedIds = items.map { it.publishedFileId }.toSet()
+        cleanupBrotatoFlattenedMods(subscribedIds, workshopContentDir)
+
+        workshopContentDir.listFiles()
+            ?.filter { it.isDirectory && it.name.toLongOrNull() in subscribedIds }
+            ?.forEach { itemDir ->
+                val itemId = itemDir.name.toLongOrNull() ?: return@forEach
+                itemDir.listFiles()
+                    ?.filter { it.isFile && it.extension.equals("zip", ignoreCase = true) }
+                    ?.forEach { zipFile ->
+                        val target = File(workshopContentDir, zipFile.name)
+                        runCatching {
+                            if (target.exists() || Files.isSymbolicLink(target.toPath())) {
+                                if (Files.isSymbolicLink(target.toPath())) {
+                                    Files.deleteIfExists(target.toPath())
+                                } else {
+                                    target.delete()
+                                }
+                            }
+                            Files.createSymbolicLink(target.toPath(), zipFile.toPath().toAbsolutePath().normalize())
+                            File(workshopContentDir, "${zipFile.name}.$BROTATO_ROUTE_MARKER").writeText(itemId.toString())
+                        }.recoverCatching {
+                            zipFile.copyTo(target, overwrite = true)
+                            File(workshopContentDir, "${zipFile.name}.$BROTATO_ROUTE_MARKER").writeText(itemId.toString())
+                        }.onFailure {
+                            Timber.tag(TAG).w(it, "Failed flattening Brotato workshop zip ${zipFile.absolutePath}")
+                        }
+                    }
+            }
+    }
+
+    private fun cleanupBrotatoFlattenedMods(
+        subscribedIds: Set<Long>,
+        workshopContentDir: File,
+    ) {
+        workshopContentDir.listFiles()
+            ?.filter { it.isFile && it.name.endsWith(".$BROTATO_ROUTE_MARKER") }
+            ?.forEach { marker ->
+                val itemId = marker.readText().trim().toLongOrNull()
+                val baseName = marker.name.removeSuffix(".$BROTATO_ROUTE_MARKER")
+                if (itemId == null || itemId !in subscribedIds) {
+                    File(workshopContentDir, baseName).let { routed ->
+                        if (Files.isSymbolicLink(routed.toPath())) {
+                            Files.deleteIfExists(routed.toPath())
+                        } else if (routed.exists()) {
+                            routed.delete()
+                        }
+                    }
+                    marker.delete()
+                }
+            }
     }
 
     fun mergeLocalModsIntoContentDir(localModsContentDir: File, workshopContentDir: File) {
@@ -458,9 +521,14 @@ object WorkshopSyncManager {
                 reason = "Wine prefix unavailable",
             )
         }
+        val isHaydee = workshopContentDir.name == "530890" || gameName.contains("haydee", ignoreCase = true)
+        val isBrotato = workshopContentDir.name == "1942280" || gameName.contains("brotato", ignoreCase = true)
         val willUseFilesystemMods =
-            routing.strategy is WorkshopModPathStrategy.SymlinkIntoDir &&
-                routing.confidence == WorkshopModPathDetector.Confidence.HIGH
+            isHaydee || (
+                !isBrotato &&
+                routing.strategy is WorkshopModPathStrategy.SymlinkIntoDir &&
+                    routing.confidence == WorkshopModPathDetector.Confidence.HIGH
+                )
 
         val dllNames = setOf("steam_api.dll", "steam_api64.dll", "steamclient.dll", "steamclient64.dll")
         val steamRootDir = workshopContentDir.parentFile?.parentFile?.parentFile?.parentFile
@@ -517,7 +585,9 @@ object WorkshopSyncManager {
         }
 
         if (winePrefix.isNotBlank()) {
-            if (routing.strategy !is WorkshopModPathStrategy.Standard) {
+            if (isHaydee) {
+                syncHaydeeWorkshopMods(gameRootDir, modDirs)
+            } else if (!isBrotato && routing.strategy !is WorkshopModPathStrategy.Standard) {
                 val titlesByItemId = items.associate { it.publishedFileId to it.title }
                 val symlinker = WorkshopSymlinker()
                 symlinker.sync(
@@ -572,6 +642,7 @@ object WorkshopSyncManager {
         }
 
         if (winePrefix.isNotBlank()) {
+            val isHaydee = workshopContentDir.name == "530890" || gameName.contains("haydee", ignoreCase = true)
             val windowsUserDir = detectWindowsUserDir(winePrefix)
             val pathDetector = WorkshopModPathDetector()
             val routing = pathDetector.detect(
@@ -584,7 +655,9 @@ object WorkshopSyncManager {
                 gameName = gameName,
                 developerName = developerName,
             )
-            if (routing.strategy !is WorkshopModPathStrategy.Standard) {
+            if (isHaydee) {
+                syncHaydeeWorkshopMods(gameRootDir, emptyList())
+            } else if (routing.strategy !is WorkshopModPathStrategy.Standard) {
                 val symlinker = WorkshopSymlinker()
                 symlinker.sync(
                     strategy = routing.strategy,
@@ -633,6 +706,108 @@ object WorkshopSyncManager {
         legacyLocalModsContentDir?.deleteRecursively()
     }
 
+    private fun syncHaydeeWorkshopMods(
+        gameRootDir: File,
+        modDirs: List<File>,
+    ) {
+        if (!gameRootDir.isDirectory) return
+
+        val targetDirs = linkedMapOf(
+            "packs" to File(gameRootDir, "Packs"),
+            "maps" to File(gameRootDir, "Maps"),
+            "outfits" to File(gameRootDir, "Outfits"),
+            "scenes" to File(gameRootDir, "Scenes"),
+            "modding" to File(gameRootDir, "Modding"),
+        )
+
+        targetDirs.values.forEach { dir ->
+            dir.mkdirs()
+            dir.listFiles()?.forEach { entry ->
+                val shouldDelete = when {
+                    Files.isSymbolicLink(entry.toPath()) -> File(entry.parentFile, "${entry.name}.$HAYDEE_ROUTE_MARKER").isFile
+                    entry.isDirectory -> File(entry, HAYDEE_ROUTE_MARKER).isFile
+                    entry.isFile -> File(entry.parentFile, "${entry.name}.$HAYDEE_ROUTE_MARKER").isFile
+                    else -> false
+                }
+                if (shouldDelete) {
+                    runCatching {
+                        if (Files.isSymbolicLink(entry.toPath())) {
+                            Files.deleteIfExists(entry.toPath())
+                        } else {
+                            entry.deleteRecursively()
+                        }
+                        File(entry.parentFile, "${entry.name}.$HAYDEE_ROUTE_MARKER").delete()
+                    }
+                }
+            }
+        }
+
+        modDirs.forEach { itemDir ->
+            routeHaydeeItem(itemDir, targetDirs)
+        }
+    }
+
+    private fun routeHaydeeItem(
+        itemDir: File,
+        targetDirs: Map<String, File>,
+    ) {
+        itemDir.listFiles()
+            ?.filter { !it.name.startsWith(".") }
+            ?.forEach { child ->
+                val targetRoot = when {
+                    child.isDirectory && child.name.equals("Maps", ignoreCase = true) -> targetDirs["maps"]
+                    child.isDirectory && child.name.equals("Outfits", ignoreCase = true) -> targetDirs["outfits"]
+                    child.isDirectory && child.name.equals("Scenes", ignoreCase = true) -> targetDirs["scenes"]
+                    child.isDirectory && child.name.equals("Modding", ignoreCase = true) -> targetDirs["modding"]
+                    child.isDirectory && child.name.equals("Packs", ignoreCase = true) -> targetDirs["packs"]
+                    child.isFile && child.extension.equals("pack", ignoreCase = true) -> targetDirs["packs"]
+                    child.isFile && child.extension.equals("scene", ignoreCase = true) -> targetDirs["scenes"]
+                    else -> null
+                } ?: return@forEach
+
+                if (child.isDirectory && child.name in setOf("Maps", "Outfits", "Scenes", "Modding", "Packs")) {
+                    child.listFiles()
+                        ?.filter { !it.name.startsWith(".") }
+                        ?.forEach { nested ->
+                            ensureHaydeeLink(File(targetRoot, nested.name), nested)
+                        }
+                } else {
+                    ensureHaydeeLink(File(targetRoot, child.name), child)
+                }
+            }
+    }
+
+    private fun ensureHaydeeLink(
+        target: File,
+        source: File,
+    ) {
+        runCatching {
+            if (target.exists() || Files.isSymbolicLink(target.toPath())) {
+                if (Files.isSymbolicLink(target.toPath())) {
+                    Files.deleteIfExists(target.toPath())
+                } else {
+                    return
+                }
+            }
+
+            target.parentFile?.mkdirs()
+            Files.createSymbolicLink(target.toPath(), source.toPath().toAbsolutePath().normalize())
+            File(target.parentFile, "${target.name}.$HAYDEE_ROUTE_MARKER").writeText("1")
+        }.recoverCatching {
+            if (source.isDirectory) {
+                if (target.exists()) return
+                source.copyRecursively(target, overwrite = true)
+                File(target, HAYDEE_ROUTE_MARKER).writeText("1")
+            } else {
+                if (target.exists()) return
+                Files.copy(source.toPath(), target.toPath())
+                File(target.parentFile, "${target.name}.$HAYDEE_ROUTE_MARKER").writeText("1")
+            }
+        }.onFailure {
+            Timber.tag(TAG).w(it, "Failed routing Haydee workshop item ${source.absolutePath}")
+        }
+    }
+
     private fun cleanupInstalledWorkshopEntries(
         gameRootDir: File,
         ownedBases: List<File>,
@@ -652,11 +827,20 @@ object WorkshopSyncManager {
                             .toAbsolutePath()
                     }.getOrNull() ?: return@forEachFileTree
                     if (normalizedBases.any { base -> target.startsWith(base) }) {
-                        runCatching { Files.deleteIfExists(entry.toPath()) }
+                        runCatching {
+                            Files.deleteIfExists(entry.toPath())
+                            File(entry.parentFile, "${entry.name}.$HAYDEE_ROUTE_MARKER").delete()
+                        }
                     }
                 }
                 entry.isDirectory && File(entry, ".gamenative_workshop").isFile -> {
                     runCatching { entry.deleteRecursively() }
+                }
+                entry.isFile && File(entry.parentFile, "${entry.name}.$HAYDEE_ROUTE_MARKER").isFile -> {
+                    runCatching {
+                        entry.delete()
+                        File(entry.parentFile, "${entry.name}.$HAYDEE_ROUTE_MARKER").delete()
+                    }
                 }
             }
         }
