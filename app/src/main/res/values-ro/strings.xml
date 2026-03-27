@@ -595,6 +595,11 @@
 	<string name="steam_offline_mode">Mod Offline Steam</string>
 	<string name="steam_offline_mode_description">Pornește jocurile Steam în mod offline</string>
 	<string name="achievement_unlocked">Realizare deblocată</string>
+	<string name="settings_achievement_notification_position">Poziția notificării realizării</string>
+	<string name="achievement_position_top_left">Stânga sus</string>
+	<string name="achievement_position_top_right">Dreapta sus</string>
+	<string name="achievement_position_bottom_left">Stânga jos</string>
+	<string name="achievement_position_bottom_right">Dreapta jos</string>
 	<string name="launch_steam_client_description">Reduce performanța și încetinește lansarea\nPermite joc online și rezolvă probleme DRM și controller\nNu toate jocurile funcționează</string>
 	<string name="allow_steam_updates">Permite actualizările Steam</string>
 	<string name="allow_steam_updates_description">Actualizează Steam la ultima versiune. Reduce semnificativ performanța.</string>
@@ -1292,4 +1297,6 @@
     <string name="download_failed_message">Un fișier necesar nu a putut fi descărcat. Verifică conexiunea la rețea și încearcă din nou.</string>
     <string name="install_failed_title">Instalarea a eșuat</string>
     <string name="install_failed_message">Fișierele de sistem nu au putut fi instalate. Încearcă din nou. Dacă problema persistă, încearcă o altă rețea sau folosește un VPN.</string>
+    <string name="settings_interface_swap_face_buttons_title">Inversează butoanele de acțiune</string>
+    <string name="settings_interface_swap_face_buttons_subtitle">Inversează pictogramele butoanelor A↔B și X↔Y</string>
 </resources>

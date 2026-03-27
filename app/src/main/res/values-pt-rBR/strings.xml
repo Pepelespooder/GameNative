@@ -427,6 +427,11 @@
     <string name="steam_offline_mode">Modo Offline do Steam</string>
     <string name="steam_offline_mode_description">Iniciar jogos Steam no modo offline</string>
     <string name="achievement_unlocked">Conquista desbloqueada</string>
+    <string name="settings_achievement_notification_position">Posição da notificação de conquista</string>
+    <string name="achievement_position_top_left">Superior esquerdo</string>
+    <string name="achievement_position_top_right">Superior direito</string>
+    <string name="achievement_position_bottom_left">Inferior esquerdo</string>
+    <string name="achievement_position_bottom_right">Inferior direito</string>
     <string name="launch_steam_client_description">Reduz o desempenho e atrasa a inicialização\nPermite jogo online e corrige problemas de DRM e de controle\nNem todos os jogos funcionam</string>
     <string name="allow_steam_updates">Permitir atualizações do Steam</string>
     <string name="allow_steam_updates_description">Atualiza o Steam para a versão mais recente. Reduz significativamente o desempenho.</string>
@@ -1157,4 +1162,6 @@
     <string name="download_failed_message">Um arquivo necessário não pôde ser baixado. Verifique sua conexão de rede e tente novamente.</string>
     <string name="install_failed_title">Falha na Instalação</string>
     <string name="install_failed_message">Os arquivos do sistema não puderam ser instalados. Tente novamente. Se o problema persistir, tente uma rede diferente ou use uma VPN.</string>
+    <string name="settings_interface_swap_face_buttons_title">Trocar botões de ação</string>
+    <string name="settings_interface_swap_face_buttons_subtitle">Troca os ícones dos botões A↔B e X↔Y</string>
 </resources>

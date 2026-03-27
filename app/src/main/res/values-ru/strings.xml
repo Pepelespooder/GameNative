@@ -1216,9 +1216,16 @@ https://gamenative.app
     <string name="wmdecoder">Декодер Windows Media</string>
     <string name="working">Работа...</string>
     <string name="achievement_unlocked">Достижение разблокировано</string>
+    <string name="settings_achievement_notification_position">Позиция уведомления о достижении</string>
+    <string name="achievement_position_top_left">Верхний левый</string>
+    <string name="achievement_position_top_right">Верхний правый</string>
+    <string name="achievement_position_bottom_left">Нижний левый</string>
+    <string name="achievement_position_bottom_right">Нижний правый</string>
     <string name="yes">Да</string>
     <string name="download_failed_title">Ошибка загрузки</string>
     <string name="download_failed_message">Не удалось загрузить необходимый файл. Проверьте подключение к сети и попробуйте снова.</string>
     <string name="install_failed_title">Ошибка установки</string>
     <string name="install_failed_message">Не удалось установить системные файлы. Попробуйте снова. Если проблема сохраняется, попробуйте другую сеть или используйте VPN.</string>
+    <string name="settings_interface_swap_face_buttons_title">Поменять кнопки действий</string>
+    <string name="settings_interface_swap_face_buttons_subtitle">Поменять местами значки кнопок A↔B и X↔Y</string>
 </resources>

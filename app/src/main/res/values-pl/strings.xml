@@ -603,6 +603,11 @@
     <string name="steam_offline_mode">Tryb Offline Steam</string>
     <string name="steam_offline_mode_description">Uruchamiaj gry Steam w trybie offline</string>
     <string name="achievement_unlocked">Osiągnięcie odblokowane</string>
+    <string name="settings_achievement_notification_position">Pozycja powiadomienia o osiągnięciu</string>
+    <string name="achievement_position_top_left">Lewy górny</string>
+    <string name="achievement_position_top_right">Prawy górny</string>
+    <string name="achievement_position_bottom_left">Lewy dolny</string>
+    <string name="achievement_position_bottom_right">Prawy dolny</string>
     <string name="launch_steam_client_description">Zmniejsza wydajność i spowalnia uruchamianie\nPozwala na grę online i naprawia problemy z DRM oraz kontrolerem\nNie wszystkie gry działają</string>
     <string name="allow_steam_updates">Zezwól na aktualizacje Steam</string>
     <string name="allow_steam_updates_description">Aktualizuje Steam do najnowszej wersji. Znacząco zmniejsza wydajność.</string>
@@ -1290,4 +1295,6 @@
     <string name="download_failed_message">Nie udało się pobrać wymaganego pliku. Sprawdź połączenie sieciowe i spróbuj ponownie.</string>
     <string name="install_failed_title">Instalacja nie powiodła się</string>
     <string name="install_failed_message">Nie udało się zainstalować plików systemowych. Spróbuj ponownie. Jeśli problem będzie się powtarzał, spróbuj innej sieci lub użyj VPN.</string>
+    <string name="settings_interface_swap_face_buttons_title">Zamień przyciski akcji</string>
+    <string name="settings_interface_swap_face_buttons_subtitle">Zamień ikony przycisków A↔B i X↔Y</string>
 </resources>

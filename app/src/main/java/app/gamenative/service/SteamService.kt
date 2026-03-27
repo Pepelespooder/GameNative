@@ -533,6 +533,32 @@ class SteamService : Service(), IChallengeUrlChanged {
             }
         }
 
+        /**
+         * Depot IDs the user's license actually grants for [appId].
+         * Returns null when unknown (license not cached yet) so callers
+         * can fall back to the old behaviour instead of blocking everything.
+         */
+        fun getLicensedDepotIds(appId: Int): Set<Int>? {
+            val ids = getPkgInfoOf(appId)?.depotIds ?: return null
+            return ids.takeIf { it.isNotEmpty() }?.toSet()
+        }
+
+        /**
+         * Batch-load licensed depot IDs for many apps in a single DB query.
+         * Returns appId → depotIds; missing entries mean license unknown (fall back to unfiltered).
+         */
+        fun buildLicensedDepotMap(apps: List<SteamApp>): Map<Int, Set<Int>> {
+            val pkgIds = apps.map { it.packageId }.filter { it != INVALID_PKG_ID }.distinct()
+            val licenses = runBlocking(Dispatchers.IO) {
+                instance?.licenseDao?.findLicenses(pkgIds) ?: emptyList()
+            }
+            val pkgToDepots = licenses.associate { it.packageId to it.depotIds.toSet() }
+            return apps.mapNotNull { app ->
+                val depots = pkgToDepots[app.packageId]?.takeIf { it.isNotEmpty() } ?: return@mapNotNull null
+                app.id to depots
+            }.toMap()
+        }
+
         fun getAppInfoOf(appId: Int): SteamApp? {
             return runBlocking(Dispatchers.IO) { instance?.appDao?.findApp(appId) }
         }
@@ -662,9 +688,22 @@ class SteamService : Service(), IChallengeUrlChanged {
         }
 
         /**
-         * Common Filter for downloadable depots
+         * Common filter for downloadable depots.
+         *
+         * [prefer64Bit] and [preferNonDeckWindows] are preference flags:
+         * `true` filters OUT the lesser variant (32-bit / Deck-only), while
+         * `false` is permissive and lets all architectures or Deck states through.
+         * [eligibleDepots] passes both as `false` to skip preference checks
+         * when computing the flags themselves.
          */
-        fun filterForDownloadableDepots(depot: DepotInfo, has64Bit: Boolean, preferredLanguage: String, ownedDlc: Map<Int, DepotInfo>?): Boolean {
+        fun filterForDownloadableDepots(
+            depot: DepotInfo,
+            prefer64Bit: Boolean,
+            preferNonDeckWindows: Boolean,
+            preferredLanguage: String,
+            ownedDlc: Map<Int, DepotInfo>?,
+            licensedDepotIds: Set<Int>? = null,
+        ): Boolean {
             if (depot.manifests.isEmpty() && depot.encryptedManifests.isNotEmpty())
                 return false
             // 1. Has something to download (0-byte manifests = stale PICS data from interrupted fetch)
@@ -673,16 +712,14 @@ class SteamService : Service(), IChallengeUrlChanged {
             if (depot.manifests.isNotEmpty() && depot.manifests.values.all { it.size == 0L && it.download == 0L })
                 return false
             // 2. Supported OS
-            if (!(depot.osList.contains(OS.windows) ||
-                        (!depot.osList.contains(OS.linux) && !depot.osList.contains(OS.macos)))
-            )
+            if (!depot.isWindowsCompatible)
                 return false
             // 3. 64-bit or indeterminate
             // Arch selection: allow 64-bit and Unknown always.
             // Allow 32-bit only when no 64-bit depot exists.
             val archOk = when (depot.osArch) {
                 OSArch.Arch64, OSArch.Unknown -> true
-                OSArch.Arch32 -> !has64Bit
+                OSArch.Arch32 -> !prefer64Bit
                 else -> false
             }
             if (!archOk) return false
@@ -692,22 +729,55 @@ class SteamService : Service(), IChallengeUrlChanged {
             // 5. Language filter - if depot has language, it must match preferred language
             if (depot.language.isNotEmpty() && depot.language != preferredLanguage)
                 return false
+            // 6. Package grants this depot — prevents grabbing region depots the user has no license for.
+            //    Skip for DLC depots: they're licensed via their own package, already validated by check 4.
+            if (depot.dlcAppId == INVALID_APP_ID && licensedDepotIds != null && depot.depotId !in licensedDepotIds)
+                return false
+            // 7. Prefer non-Steam-Deck depot when both exist (we're on Android, not Deck)
+            if (depot.steamDeck && preferNonDeckWindows)
+                return false
 
             return true
+        }
+
+        /**
+         * Depots eligible for preference-flag computation: delegates to
+         * [filterForDownloadableDepots] with both preference flags false
+         * so arch and Steam Deck checks become no-ops. This gives us the pool from
+         * which to derive those flags without circular dependency.
+         */
+        fun eligibleDepots(
+            depots: Map<Int, DepotInfo>,
+            preferredLanguage: String,
+            ownedDlc: Map<Int, DepotInfo>?,
+            licensedDepotIds: Set<Int>?,
+        ): Collection<DepotInfo> = depots.values.filter { depot ->
+            filterForDownloadableDepots(depot, prefer64Bit = false, preferNonDeckWindows = false, preferredLanguage, ownedDlc, licensedDepotIds)
+        }
+
+        /**
+         * Two-pass depot resolution: derives preference flags from [eligibleDepots],
+         * then applies full filtering including arch and Steam Deck preference.
+         */
+        fun resolveDownloadableDepots(
+            depots: Map<Int, DepotInfo>,
+            preferredLanguage: String,
+            ownedDlc: Map<Int, DepotInfo>?,
+            licensedDepotIds: Set<Int>?,
+        ): Map<Int, DepotInfo> {
+            val eligible = eligibleDepots(depots, preferredLanguage, ownedDlc, licensedDepotIds)
+            val has64Bit = eligible.any { it.osArch == OSArch.Arch64 }
+            val hasNonDeckWin = eligible.any { !it.steamDeck && it.isWindowsCompatible }
+            return depots.filter { (_, depot) ->
+                filterForDownloadableDepots(depot, has64Bit, hasNonDeckWin, preferredLanguage, ownedDlc, licensedDepotIds)
+            }
         }
 
         fun getMainAppDepots(appId: Int, containerLanguage: String): Map<Int, DepotInfo> {
             val appInfo = getAppInfoOf(appId) ?: return emptyMap()
             val ownedDlc = runBlocking { getOwnedAppDlc(appId) }
-
-            // If the game ships any 64-bit depot, prefer those and ignore x86 ones
-            val has64Bit = appInfo.depots.values.any { it.osArch == OSArch.Arch64 }
-
-            return appInfo.depots.asSequence()
-                .filter { (depotId, depot) ->
-                    return@filter filterForDownloadableDepots(depot, has64Bit, containerLanguage, ownedDlc)
-                }
-                .associate { it.toPair() }
+            val licensedDepots = getLicensedDepotIds(appId)
+            return resolveDownloadableDepots(appInfo.depots, containerLanguage, ownedDlc, licensedDepots)
         }
 
         /**
@@ -726,26 +796,23 @@ class SteamService : Service(), IChallengeUrlChanged {
         fun getDownloadableDepots(appId: Int, preferredLanguage: String): Map<Int, DepotInfo> {
             val appInfo = getAppInfoOf(appId) ?: return emptyMap()
             val ownedDlc = runBlocking { getOwnedAppDlc(appId) }
+            val licensedDepots = getLicensedDepotIds(appId)
 
-            // If the game ships any 64-bit depot, prefer those and ignore x86 ones
-            val has64Bit = appInfo.depots.values.any { it.osArch == OSArch.Arch64 }
-
-            val map = appInfo.depots
-                .asSequence()
-                .filter { (depotId, depot) ->
-                    return@filter filterForDownloadableDepots(depot, has64Bit, preferredLanguage, ownedDlc)
-                }
-                .associate { it.toPair() }
-                .toMutableMap()
+            val baseDepots = resolveDownloadableDepots(appInfo.depots, preferredLanguage, ownedDlc, licensedDepots)
+            // parent app's arch applies to DLC arch selection
+            val has64Bit = eligibleDepots(appInfo.depots, preferredLanguage, ownedDlc, licensedDepots)
+                .any { it.osArch == OSArch.Arch64 }
+            val map = baseDepots.toMutableMap()
 
             val indirectDlcApps = getDownloadableDlcAppsOf(appId).orEmpty()
             indirectDlcApps.forEach { dlcApp ->
+                val dlcLicensedDepots = getLicensedDepotIds(dlcApp.id)
+                val dlcEligible = eligibleDepots(dlcApp.depots, preferredLanguage, null, dlcLicensedDepots)
+                val dlcHasNonDeckWin = dlcEligible.any { !it.steamDeck && it.isWindowsCompatible }
                 dlcApp.depots
-                    .asSequence()
-                    .filter { (depotId, depot) ->
-                        return@filter filterForDownloadableDepots(depot, has64Bit, preferredLanguage, null)
+                    .filter { (_, depot) ->
+                        filterForDownloadableDepots(depot, has64Bit, dlcHasNonDeckWin, preferredLanguage, null, dlcLicensedDepots)
                     }
-                    .associate { it.toPair() }
                     .forEach { (depotId, depot) ->
                         // Add DLC Depots with custom object
                         map[depotId] = DepotInfo(
@@ -759,6 +826,7 @@ class SteamService : Service(), IChallengeUrlChanged {
                             language = depot.language,
                             manifests = depot.manifests,
                             encryptedManifests = depot.encryptedManifests,
+                            steamDeck = depot.steamDeck,
                         )
                     }
             }
@@ -932,10 +1000,7 @@ class SteamService : Service(), IChallengeUrlChanged {
             val installDir = appInfo.config.installDir.ifEmpty { appInfo.name }
 
             val depots = appInfo.depots.values.filter { d ->
-                !d.sharedInstall && (
-                    d.osList.isEmpty() ||
-                        d.osList.any { it.name.equals("windows", true) || it.name.equals("none", true) }
-                    )
+                !d.sharedInstall && d.isWindowsCompatible
             }
             Timber.i("Depots considered: $depots")
 
@@ -1617,6 +1682,20 @@ class SteamService : Service(), IChallengeUrlChanged {
                             depotDownloader.add(dlcAppItem)
                         }
 
+                        // Signal that no more items will be added
+                        depotDownloader.finishAdding()
+
+                        // Start Download
+                        depotDownloader.startDownloading()
+
+                        Timber.i("Downloading game to " + defaultAppInstallPath)
+
+                        // Wait for completion
+                        depotDownloader.getCompletion().await()
+
+                        // Close the downloader
+                        depotDownloader.close()
+
                         val appConfig = getAppInfoOf(appId)?.config
                         if (appConfig?.steamControllerTemplateIndex == 1) {
                             val controllerConfig = appConfig.steamControllerConfigDetails
@@ -1748,20 +1827,6 @@ class SteamService : Service(), IChallengeUrlChanged {
                                 }
                             }
                         }
-
-                        // Signal that no more items will be added
-                        depotDownloader.finishAdding()
-
-                        // Start Download
-                        depotDownloader.startDownloading()
-
-                        Timber.i("Downloading game to " + defaultAppInstallPath)
-
-                        // Wait for completion
-                        depotDownloader.getCompletion().await()
-
-                        // Close the downloader
-                        depotDownloader.close()
 
                         // Complete app download
                         if (mainAppDepots.isNotEmpty()) {
@@ -2729,6 +2794,38 @@ class SteamService : Service(), IChallengeUrlChanged {
             return dirs
         }
 
+        /**
+         * Scans GSE save directories for unlocked achievements and a stats directory.
+         * Shared by [syncAchievementsFromGoldberg] and [AchievementWatcher].
+         *
+         * @return pair of (unlocked achievement names, first stats directory found or null)
+         */
+        fun collectGseUnlocksAndStats(gseDirs: List<File>): Pair<Set<String>, File?> {
+            val unlocked = mutableSetOf<String>()
+            var statsDir: File? = null
+            for (dir in gseDirs) {
+                val achFile = File(dir, "achievements.json")
+                if (achFile.exists()) {
+                    try {
+                        val json = JSONObject(achFile.readText(Charsets.UTF_8))
+                        for (name in json.keys()) {
+                            val entry = json.optJSONObject(name) ?: continue
+                            if (entry.optBoolean("earned", false)) {
+                                unlocked.add(name)
+                            }
+                        }
+                    } catch (e: Exception) {
+                        Timber.e(e, "Failed to parse achievements.json in ${dir.absolutePath}")
+                    }
+                }
+                val sd = File(dir, "stats")
+                if (statsDir == null && sd.isDirectory && (sd.listFiles()?.isNotEmpty() == true)) {
+                    statsDir = sd
+                }
+            }
+            return unlocked to statsDir
+        }
+
         suspend fun syncAchievementsFromGoldberg(context: Context, appId: Int) {
             val gseSaveDirs = getGseSaveDirs(context, appId).filter { it.isDirectory }
             if (gseSaveDirs.isEmpty()) {
@@ -2736,34 +2833,9 @@ class SteamService : Service(), IChallengeUrlChanged {
                 return
             }
 
-            val unlockedNames = mutableSetOf<String>()
-            var gseStatsDir: File? = null
+            val (unlockedNames, gseStatsDir) = collectGseUnlocksAndStats(gseSaveDirs)
 
-            for (gseSaveDir in gseSaveDirs) {
-                val goldbergAchFile = File(gseSaveDir, "achievements.json")
-                if (goldbergAchFile.exists()) {
-                    try {
-                        val json = JSONObject(goldbergAchFile.readText(Charsets.UTF_8))
-                        for (name in json.keys()) {
-                            val entry = json.optJSONObject(name) ?: continue
-                            if (entry.optBoolean("earned", false)) {
-                                unlockedNames.add(name)
-                            }
-                        }
-                    } catch (e: Exception) {
-                        Timber.e(e, "Failed to parse Goldberg achievements.json in ${gseSaveDir.absolutePath} for appId=$appId")
-                    }
-                }
-
-                val statsDir = File(gseSaveDir, "stats")
-                if (gseStatsDir == null && statsDir.isDirectory && (statsDir.listFiles()?.isNotEmpty() == true)) {
-                    gseStatsDir = statsDir
-                }
-            }
-
-            val hasStats = gseStatsDir != null
-
-            if (unlockedNames.isEmpty() && !hasStats) {
+            if (unlockedNames.isEmpty() && gseStatsDir == null) {
                 Timber.d("No earned achievements or stats found in Goldberg output for appId=$appId")
                 return
             }
@@ -2774,6 +2846,7 @@ class SteamService : Service(), IChallengeUrlChanged {
                 return
             }
 
+            val hasStats = gseStatsDir != null
             Timber.i("Found ${unlockedNames.size} earned achievements and ${if (hasStats) "stats" else "no stats"} for appId=$appId, syncing to Steam")
             val result = storeAchievementUnlocks(appId, configDirectory, unlockedNames, gseStatsDir ?: gseSaveDirs.first().resolve("stats"))
             result.onSuccess {
@@ -2783,7 +2856,7 @@ class SteamService : Service(), IChallengeUrlChanged {
             }
         }
 
-        private fun findSteamSettingsDir(context: Context, appId: Int): String? {
+        fun findSteamSettingsDir(context: Context, appId: Int): String? {
             val appDirPath = getAppDirPath(appId)
             val appDirSettings = File(appDirPath, "steam_settings")
             if (File(appDirSettings, "achievement_name_to_block.json").exists()) {
