@@ -1324,7 +1324,6 @@ class SteamAppScreen : BaseAppScreen() {
                 onDismissRequest = { hideBranchDialog(gameId) },
             )
         }
-
         if (showWorkshopScreen) {
             WorkshopScreen(
                 containerAppId = libraryItem.appId,
