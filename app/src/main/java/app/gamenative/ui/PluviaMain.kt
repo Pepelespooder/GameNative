@@ -63,7 +63,6 @@ import app.gamenative.enums.SyncResult
 import app.gamenative.events.AndroidEvent
 import app.gamenative.service.SteamService
 import app.gamenative.service.amazon.AmazonService
-import app.gamenative.workshop.WorkshopSyncManager
 import com.posthog.PostHog
 import app.gamenative.ui.component.AchievementOverlay
 import app.gamenative.ui.component.ConnectionStatusBanner
@@ -1123,7 +1122,6 @@ fun PluviaMain(
                 containerConfigForDialog?.let { config ->
                     ContainerConfigDialog(
                         visible = true,
-                        containerAppId = appId,
                         title = context.getString(R.string.container_config_title),
                         initialConfig = config,
                         onDismissRequest = { openContainerConfigForAppId = null },
@@ -1594,6 +1592,45 @@ fun preLaunchApp(
                     this,
                     context = context,
                 ).await()
+            } else {
+                if (container.wineVersion.contains("proton-9.0-arm64ec") &&
+                    !SteamService.isFileInstallable(context, "proton-9.0-arm64ec.txz")
+                ) {
+                    setLoadingMessage("Downloading arm64ec Proton")
+                    SteamService.downloadFile(
+                        onDownloadProgress = { setLoadingProgress(it / 1.0f) },
+                        this,
+                        context = context,
+                        "proton-9.0-arm64ec.txz",
+                    ).await()
+                } else if (container.wineVersion.contains("proton-9.0-x86_64") &&
+                    !SteamService.isFileInstallable(context, "proton-9.0-x86_64.txz")
+                ) {
+                    setLoadingMessage("Downloading x86_64 Proton")
+                    SteamService.downloadFile(
+                        onDownloadProgress = { setLoadingProgress(it / 1.0f) },
+                        this,
+                        context = context,
+                        "proton-9.0-x86_64.txz",
+                    ).await()
+                }
+                if (container.wineVersion.contains("proton-9.0-x86_64") || container.wineVersion.contains("proton-9.0-arm64ec")) {
+                    val protonVersion = container.wineVersion
+                    val imageFs = ImageFs.find(context)
+                    val outFile = File(imageFs.rootDir, "/opt/$protonVersion")
+                    val binDir = File(outFile, "bin")
+                    if (!binDir.exists() || !binDir.isDirectory) {
+                        Timber.i("Extracting $protonVersion to /opt/")
+                        setLoadingMessage("Extracting $protonVersion")
+                        setLoadingProgress(-1f)
+                        val downloaded = File(imageFs.getFilesDir(), "$protonVersion.txz")
+                        TarCompressorUtils.extract(
+                            TarCompressorUtils.Type.XZ,
+                            downloaded,
+                            outFile,
+                        )
+                    }
+                }
             }
 
             if (!container.isUseLegacyDRM && !container.isLaunchRealSteam &&
@@ -1694,130 +1731,6 @@ fun preLaunchApp(
 
         // must activate container before downloading save files
         containerManager.activateContainer(container)
-
-        if (gameSource == GameSource.STEAM && !isOffline) {
-            try {
-                val winePrefix = container.rootDir.absolutePath + "/.wine"
-                val workshopContentDir = WorkshopSyncManager.getWorkshopContentDir(winePrefix, gameId)
-                val legacyLocalModsContentDir = WorkshopSyncManager.getLegacyLocalModsContentDir(container.rootDir, gameId)
-                val gameRootDir = File(SteamService.getAppDirPath(gameId))
-                val workshopEnabled = container.getExtra("workshopEnabled", "false").toBoolean()
-                val localOnlyMods = container.getExtra("localOnlyMods", "false").toBoolean()
-
-                if (!workshopEnabled) {
-                    // Workshop is disabled for this container, so skip all Workshop sync/routing work.
-                } else if (localOnlyMods) {
-                    setLoadingMessage("Loading local workshop mods")
-                    WorkshopSyncManager.mergeLocalModsIntoContentDir(
-                        localModsContentDir = legacyLocalModsContentDir,
-                        workshopContentDir = workshopContentDir,
-                    )
-                    WorkshopSyncManager.configureModSymlinks(
-                        gameRootDir = gameRootDir,
-                        workshopContentDir = workshopContentDir,
-                        winePrefix = winePrefix,
-                        gameName = SteamService.getAppInfoOf(gameId)?.name ?: "",
-                    )
-                } else {
-                    val steamClient = SteamService.instance?.steamClient
-                    val steamId = SteamService.userSteamId
-                    val licenses = SteamService.getLicensesFromDb()
-
-                    if (steamClient != null && steamId != null && licenses.isNotEmpty()) {
-                        setLoadingMessage("Syncing Workshop mods")
-                        setLoadingProgress(-1f)
-                        WorkshopSyncManager.mergeLocalModsIntoContentDir(
-                            localModsContentDir = legacyLocalModsContentDir,
-                            workshopContentDir = workshopContentDir,
-                        )
-
-                        val subscriptions = WorkshopSyncManager.getSubscribedItems(
-                            appId = gameId,
-                            steamClient = steamClient,
-                            steamId = steamId,
-                        )
-
-                        if (subscriptions.succeeded) {
-                            val preservedLocalIds = if (subscriptions.isComplete) {
-                                emptySet()
-                            } else {
-                                workshopContentDir.listFiles()
-                                    ?.asSequence()
-                                    ?.mapNotNull { it.takeIf(File::isDirectory)?.name?.toLongOrNull() }
-                                    ?.toSet()
-                                    ?: emptySet()
-                            }
-                            WorkshopSyncManager.cleanupUnsubscribedItems(
-                                subscribedItems = subscriptions.items,
-                                workshopContentDir = workshopContentDir,
-                                preserveIds = preservedLocalIds,
-                            )
-                            val itemsNeedingSync = WorkshopSyncManager.getItemsNeedingSync(
-                                items = subscriptions.items,
-                                workshopContentDir = workshopContentDir,
-                            )
-                            if (itemsNeedingSync.isNotEmpty()) {
-                                WorkshopSyncManager.downloadItems(
-                                    items = itemsNeedingSync,
-                                    steamClient = steamClient,
-                                    licenses = licenses,
-                                    workshopContentDir = workshopContentDir,
-                                    onItemProgress = { completed, total, currentTitle ->
-                                        setLoadingMessage(
-                                            if (currentTitle.isBlank()) {
-                                                "Syncing Workshop mods ($completed/$total)"
-                                            } else {
-                                                "Syncing Workshop mods ($completed/$total): $currentTitle"
-                                            },
-                                        )
-                                    },
-                                    onBytesProgress = { downloadedBytes, totalBytes ->
-                                        if (totalBytes > 0L) {
-                                            setLoadingProgress(
-                                                (downloadedBytes.toFloat() / totalBytes.toFloat()).coerceIn(0f, 1f),
-                                            )
-                                        } else {
-                                            setLoadingProgress(-1f)
-                                        }
-                                    },
-                                )
-                                WorkshopSyncManager.finalizeDownloadedItems(
-                                    items = itemsNeedingSync,
-                                    workshopContentDir = workshopContentDir,
-                                )
-                            }
-                            WorkshopSyncManager.updateMarkerTimestamps(
-                                items = subscriptions.items,
-                                workshopContentDir = workshopContentDir,
-                            )
-                            WorkshopSyncManager.configureModSymlinks(
-                                gameRootDir = gameRootDir,
-                                workshopContentDir = workshopContentDir,
-                                items = subscriptions.items,
-                                winePrefix = winePrefix,
-                                gameName = SteamService.getAppInfoOf(gameId)?.name ?: "",
-                            )
-                        } else {
-                            WorkshopSyncManager.configureModSymlinks(
-                                gameRootDir = gameRootDir,
-                                workshopContentDir = workshopContentDir,
-                                winePrefix = winePrefix,
-                                gameName = SteamService.getAppInfoOf(gameId)?.name ?: "",
-                            )
-                        }
-                    } else {
-                        WorkshopSyncManager.configureModSymlinks(
-                            gameRootDir = gameRootDir,
-                            workshopContentDir = workshopContentDir,
-                            winePrefix = winePrefix,
-                            gameName = SteamService.getAppInfoOf(gameId)?.name ?: "",
-                        )
-                    }
-                }
-            } catch (e: Exception) {
-                Timber.tag("preLaunchApp").w(e, "Workshop sync failed")
-            }
-        }
 
         // If another game is running on this account elsewhere, prompt user first (cross-app session)
         val isSteamGame = gameSource == GameSource.STEAM
