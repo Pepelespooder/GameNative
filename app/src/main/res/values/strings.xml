@@ -99,6 +99,7 @@
     <string name="not_enough_space">Not Enough Space</string>
     <string name="proceed">Proceed</string>
     <string name="cancel">Cancel</string>
+    <string name="delete">Delete</string>
     <string name="untitled">Untitled</string>
     <string name="confirm_delete">Confirm Deletion</string>
     <string name="destination_library">Library</string>
@@ -176,7 +177,6 @@
     <string name="edit">Edit</string>
     <string name="remove">Remove</string>
     <string name="add">Add</string>
-    <string name="delete">Delete</string>
     <string name="copy_from">Copy From</string>
     <string name="ok">Ok</string>
     <string name="container_config_custom_resolution_title">Set Custom Resolution</string>
@@ -544,42 +544,6 @@
     <string name="download_failed_try_again">Download failed. Please try again.</string>
     <string name="update_available">Update Available</string>
     <string name="game_information">Game Information</string>
-    <string name="workshop_entry">Workshop</string>
-    <string name="workshop_title">%1$s Workshop</string>
-    <string name="workshop_refresh">Refresh workshop subscriptions</string>
-    <string name="workshop_browse_tab">Browse</string>
-    <string name="workshop_subscribed_tab">Subscribed</string>
-    <string name="workshop_search_label">Search Workshop</string>
-    <string name="workshop_search">Search workshop</string>
-    <string name="workshop_filters">Workshop filters</string>
-    <string name="workshop_subscribe">Subscribe</string>
-    <string name="workshop_subscribed">Subscribed</string>
-    <string name="workshop_unsubscribe">Unsubscribe</string>
-    <string name="workshop_load_more">Load more</string>
-    <string name="workshop_no_items">No workshop items found.</string>
-    <string name="workshop_no_subscriptions">No workshop subscriptions for this game yet.</string>
-    <string name="workshop_no_description">No description available.</string>
-    <string name="workshop_downloading_section">Downloading</string>
-    <string name="workshop_downloading_count">%1$d active</string>
-    <string name="workshop_installed_section">Installed</string>
-    <string name="workshop_installed_count">%1$d total</string>
-    <string name="workshop_detail_fallback_title">Workshop Item</string>
-    <string name="workshop_stat_subscribers">Subscribers</string>
-    <string name="workshop_stat_favorites">Favorites</string>
-    <string name="workshop_stat_views">Views</string>
-    <string name="workshop_stat_posted">Posted</string>
-    <string name="workshop_stat_size">Size</string>
-    <string name="workshop_stat_updated">Updated</string>
-    <string name="workshop_label_description">Description</string>
-    <string name="enable_workshop">Enable Workshop</string>
-    <string name="enable_workshop_description">Show the Workshop button for this Steam container when the game supports Workshop.</string>
-    <string name="local_only_mods">Local only mods</string>
-    <string name="local_only_mods_description">Skip Steam Workshop syncing and only use mods already stored locally for this container.</string>
-    <string name="delete_steam_workshop_data">Delete Steam Workshop data</string>
-    <string name="delete_steam_workshop_data_subtitle">Remove cached Workshop mods and generated Workshop links for this container.</string>
-    <string name="delete_steam_workshop_data_description">This deletes the container\'s local Steam Workshop content, subscription metadata, and generated Workshop links. It does not uninstall the game itself.</string>
-    <string name="delete_steam_workshop_data_success">Steam Workshop data deleted.</string>
-    <string name="delete_steam_workshop_data_failed">Failed to delete Steam Workshop data.</string>
     <string name="status">Status</string>
     <string name="status_online">Online</string>
     <string name="status_away">Away</string>
@@ -1185,6 +1149,11 @@
     <string name="library_source_steam">Steam</string>
     <string name="library_source_custom">Custom Games</string>
     <string name="library_source_title">Source</string>
+    <string name="library_source_not_logged_in_steam">Sign in to Steam to see your library</string>
+    <string name="library_source_not_logged_in_gog">Sign in to GOG to see your library</string>
+    <string name="library_source_not_logged_in_epic">Sign in to Epic to see your library</string>
+    <string name="library_source_not_logged_in_amazon">Sign in to Amazon to see your library</string>
+    <string name="library_source_no_custom_games">No custom games added yet</string>
     <string name="library_layout_title">Layout</string>
     <string name="library_options">Options</string>
     <string name="back">Back</string>
@@ -1394,10 +1363,14 @@
     <string name="manifest_type_mismatch">Downloaded content does not match expected type.</string>
     <string name="manifest_glibc_not_supported">GLIBC builds are not supported.</string>
 
-    <!-- Library: source not logged in splash -->
-    <string name="library_source_not_logged_in_steam">Sign in to access your Steam library.</string>
-    <string name="library_source_not_logged_in_gog">Sign in to access your GOG library.</string>
-    <string name="library_source_not_logged_in_epic">Sign in to access your Epic library.</string>
-    <string name="library_source_not_logged_in_amazon">Sign in to access your Amazon library.</string>
-    <string name="library_source_no_custom_games">You have not added any custom games.</string>
+    <!-- Workshop -->
+    <string name="workshop_checking_mods">Checking Workshop mods…</string>
+    <string name="workshop_update_title">Workshop Mod Updates</string>
+    <string name="workshop_update_prompt">%1$s MB of mod updates available. Download now or skip?</string>
+    <string name="workshop_download_btn">Download</string>
+    <string name="workshop_skip_btn">Skip</string>
+    <string name="workshop_downloading">Downloading Workshop Mods (%1$d/%2$d)</string>
+    <string name="workshop_processing">Processing mods…</string>
+    <string name="workshop_failed_count">%1$d workshop mod(s) failed to update</string>
+    <string name="workshop_download_failed">Download failed</string>
 </resources>
