@@ -1244,7 +1244,7 @@ internal fun AppScreenContent(
             )
         }
 
-        val conflictDateFormat = remember { SimpleDateFormat("MMM dd, yyyy HH:mm", java.util.Locale.getDefault()) }
+        val conflictDateFormat = remember { SimpleDateFormat("MMM dd, yyyy HH:mm:ss", java.util.Locale.getDefault()) }
         val localDate = remember(displayInfo.conflictLocalTimestamp) {
             displayInfo.conflictLocalTimestamp?.let { conflictDateFormat.format(Date(it)) } ?: ""
         }
