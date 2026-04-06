@@ -137,6 +137,7 @@ object EpicCloudSavesManager {
             ?: return false
 
         Timber.tag("Epic").i("[Cloud Saves] Sync action determined: $action")
+        PluviaApp.events.emit(AndroidEvent.CloudSaveSyncStarted(appId, isUploading = action == SyncAction.UPLOAD))
 
         val result = when (action) {
             SyncAction.DOWNLOAD -> downloadSaves(context, appId, creds.accountId)

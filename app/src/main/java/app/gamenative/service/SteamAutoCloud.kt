@@ -223,6 +223,7 @@ object SteamAutoCloud {
         parentScope: CoroutineScope = CoroutineScope(Dispatchers.IO),
         prefixToPath: (String) -> String,
         overrideLocalChangeNumber: Long? = null,
+        onPhaseStarted: ((isUploading: Boolean) -> Unit)? = null,
         onProgress: ((message: String, progress: Float) -> Unit)? = null,
     ): Deferred<PostSyncInfo?> = parentScope.async {
         val postSyncInfo: PostSyncInfo?
@@ -752,6 +753,7 @@ object SteamAutoCloud {
 
             val downloadUserFiles: (CoroutineScope) -> Deferred<PostSyncInfo?> = { parentScope ->
                 parentScope.async {
+                    onPhaseStarted?.invoke(false)
                     Timber.i("Downloading cloud user files")
 
                     val remoteUserFiles = fileChangeListToUserFiles(appFileListChange)
@@ -812,6 +814,7 @@ object SteamAutoCloud {
 
             val uploadUserFiles: (CoroutineScope) -> Deferred<Unit> = { parentScope ->
                 parentScope.async {
+                    onPhaseStarted?.invoke(true)
                     Timber.i("Uploading local user files")
 
                     val fileChanges = steamInstance.fileChangeListsDao.getByAppId(appInfo.id).let {

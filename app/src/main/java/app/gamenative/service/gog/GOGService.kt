@@ -562,6 +562,9 @@ class GOGService : Service() {
                         dirname = location.name,
                         lastSyncTimestamp = timestamp,
                         preferredAction = preferredAction,
+                        onPhaseStarted = { isUploading ->
+                            PluviaApp.events.emit(AndroidEvent.CloudSaveSyncStarted(gameId, isUploading = isUploading))
+                        },
                     )
 
                     if (newTimestamp > 0) {
