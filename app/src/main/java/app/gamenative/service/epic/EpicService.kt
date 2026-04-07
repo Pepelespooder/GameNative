@@ -16,6 +16,7 @@ import app.gamenative.events.AndroidEvent
 import app.gamenative.PluviaApp
 import app.gamenative.utils.ContainerUtils
 import app.gamenative.service.NotificationHelper
+import app.gamenative.ui.data.CloudSaveStatus
 import dagger.hilt.android.AndroidEntryPoint
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
@@ -447,7 +448,7 @@ class EpicService : Service() {
 
                         // Trigger a cloud save download so saves are ready before first launch.
                         if (game.cloudSaveEnabled) {
-                            PluviaApp.events.emitJava(AndroidEvent.CloudSaveSyncStarted(gameId))
+                            PluviaApp.events.emitJava(AndroidEvent.CloudStatusChanged(gameId, CloudSaveStatus.DOWNLOADING))
                             instance.scope.launch {
                                 EpicCloudSavesManager.syncCloudSaves(
                                     context = context,

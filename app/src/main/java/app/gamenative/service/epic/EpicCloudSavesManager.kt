@@ -6,6 +6,7 @@ import app.gamenative.service.epic.manifest.EpicManifest
 import app.gamenative.PluviaApp
 import app.gamenative.events.AndroidEvent
 import app.gamenative.enums.SaveLocation
+import app.gamenative.ui.data.CloudSaveStatus
 import app.gamenative.utils.FileUtils
 import app.gamenative.utils.Net
 import java.io.File
@@ -109,7 +110,12 @@ object EpicCloudSavesManager {
                 activeCloudSyncPhases.remove(appId)
             }
         }
-        PluviaApp.events.emit(AndroidEvent.CloudSaveSynced(appId, success = result))
+        PluviaApp.events.emit(
+            AndroidEvent.CloudStatusChanged(
+                appId,
+                if (result) CloudSaveStatus.UP_TO_DATE else CloudSaveStatus.FAILED,
+            ),
+        )
         result
     }
 
@@ -145,7 +151,12 @@ object EpicCloudSavesManager {
 
         Timber.tag("Epic").i("[Cloud Saves] Sync action determined: $action")
         syncMutex.withLock { activeCloudSyncPhases[appId] = action == SyncAction.UPLOAD }
-        PluviaApp.events.emit(AndroidEvent.CloudSaveSyncStarted(appId, isUploading = action == SyncAction.UPLOAD))
+        PluviaApp.events.emit(
+            AndroidEvent.CloudStatusChanged(
+                appId,
+                if (action == SyncAction.UPLOAD) CloudSaveStatus.UPLOADING else CloudSaveStatus.DOWNLOADING,
+            ),
+        )
 
         val result = when (action) {
             SyncAction.DOWNLOAD -> downloadSaves(context, appId, creds.accountId)

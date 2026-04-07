@@ -400,12 +400,22 @@ class SteamService : Service(), IChallengeUrlChanged {
 
         private fun markCloudSyncStarted(appId: Int, isUploading: Boolean) {
             activeCloudSyncPhases[appId] = isUploading
-            PluviaApp.events.emit(AndroidEvent.CloudSaveSyncStarted(appId, isUploading = isUploading))
+            PluviaApp.events.emit(
+                AndroidEvent.CloudStatusChanged(
+                    appId,
+                    if (isUploading) CloudSaveStatus.UPLOADING else CloudSaveStatus.DOWNLOADING,
+                ),
+            )
         }
 
         private fun markCloudSyncFinished(appId: Int, success: Boolean) {
             activeCloudSyncPhases.remove(appId)
-            PluviaApp.events.emit(AndroidEvent.CloudSaveSynced(appId, success = success))
+            PluviaApp.events.emit(
+                AndroidEvent.CloudStatusChanged(
+                    appId,
+                    if (success) CloudSaveStatus.UP_TO_DATE else CloudSaveStatus.FAILED,
+                ),
+            )
         }
 
         fun getActiveCloudSyncPhase(appId: Int): Boolean? = activeCloudSyncPhases[appId]
@@ -2304,7 +2314,7 @@ class SteamService : Service(), IChallengeUrlChanged {
 
         /**
          * High-level entry point for a manual cloud sync (e.g. triggered from the UI).
-         * Resolves container-aware Wine prefix paths, emits [AndroidEvent.CloudSaveSyncStarted],
+         * Resolves container-aware Wine prefix paths, emits [AndroidEvent.CloudStatusChanged],
          * then delegates to [forceSyncUserFiles].
          */
         suspend fun launchForceSync(

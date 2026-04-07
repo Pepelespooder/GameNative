@@ -395,48 +395,39 @@ class SteamAppScreen : BaseAppScreen() {
             }
             val onDisconnected: (SteamEvent.Disconnected) -> Unit = { cloudConnectivityVersion.value++ }
             val onRemotelyDisconnected: (SteamEvent.RemotelyDisconnected) -> Unit = { cloudConnectivityVersion.value++ }
-            val onCloudSaveSynced: (AndroidEvent.CloudSaveSynced) -> Unit = { event ->
+            val onCloudStatusChanged: (AndroidEvent.CloudStatusChanged) -> Unit = { event ->
                 if (event.appId == gameId) {
-                    if (event.success) {
-                        cloudSaveStatus.value = CloudSaveStatus.UP_TO_DATE
-                        syncStateText.value = context.getString(R.string.cloud_saves_up_to_date)
-                    } else {
+                    cloudSaveStatus.value = event.status
+                    syncStateText.value = event.status.toDisplayString(context)
+                    if (event.status == CloudSaveStatus.FAILED) {
                         cloudConnectivityVersion.value++
                     }
-                }
-            }
-            val onCloudSaveSyncStarted: (AndroidEvent.CloudSaveSyncStarted) -> Unit = { event ->
-                if (event.appId == gameId) {
-                    cloudSaveStatus.value = if (event.isUploading) CloudSaveStatus.UPLOADING else CloudSaveStatus.DOWNLOADING
-                    syncStateText.value = context.getString(if (event.isUploading) R.string.cloud_saves_uploading else R.string.cloud_saves_downloading)
                 }
             }
             PluviaApp.events.on<SteamEvent.LogonEnded, Unit>(onLogonEnded)
             PluviaApp.events.on<SteamEvent.Disconnected, Unit>(onDisconnected)
             PluviaApp.events.on<SteamEvent.RemotelyDisconnected, Unit>(onRemotelyDisconnected)
-            PluviaApp.events.on<AndroidEvent.CloudSaveSynced, Unit>(onCloudSaveSynced)
-            PluviaApp.events.on<AndroidEvent.CloudSaveSyncStarted, Unit>(onCloudSaveSyncStarted)
+            PluviaApp.events.on<AndroidEvent.CloudStatusChanged, Unit>(onCloudStatusChanged)
             onDispose {
                 PluviaApp.events.off<SteamEvent.LogonEnded, Unit>(onLogonEnded)
                 PluviaApp.events.off<SteamEvent.Disconnected, Unit>(onDisconnected)
                 PluviaApp.events.off<SteamEvent.RemotelyDisconnected, Unit>(onRemotelyDisconnected)
-                PluviaApp.events.off<AndroidEvent.CloudSaveSynced, Unit>(onCloudSaveSynced)
-                PluviaApp.events.off<AndroidEvent.CloudSaveSyncStarted, Unit>(onCloudSaveSyncStarted)
+                PluviaApp.events.off<AndroidEvent.CloudStatusChanged, Unit>(onCloudStatusChanged)
             }
         }
 
         LaunchedEffect(gameId, cloudConnectivityVersion.value) {
             if (hasCloudSaves) {
-                while (true) {
-                    val activePhase = SteamService.getActiveCloudSyncPhase(gameId) ?: break
+                cloudSaveStatus.value = CloudSaveStatus.CHECKING
+                syncStateText.value = context.getString(R.string.cloud_saves_checking)
+                val activePhase = SteamService.getActiveCloudSyncPhase(gameId)
+                if (activePhase != null) {
                     cloudSaveStatus.value = if (activePhase) CloudSaveStatus.UPLOADING else CloudSaveStatus.DOWNLOADING
                     syncStateText.value = context.getString(
                         if (activePhase) R.string.cloud_saves_uploading else R.string.cloud_saves_downloading,
                     )
-                    delay(250)
+                    return@LaunchedEffect
                 }
-                cloudSaveStatus.value = CloudSaveStatus.CHECKING
-                syncStateText.value = context.getString(R.string.cloud_saves_checking)
                 val accountId = (SteamService.userSteamId?.accountID?.toLong()
                     ?: PrefManager.steamUserAccountId.toLong())
                 // Each Steam game has its own Wine container at home/xuser-STEAM_<id>/.wine.
