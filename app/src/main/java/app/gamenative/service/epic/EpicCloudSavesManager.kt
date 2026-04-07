@@ -35,6 +35,7 @@ object EpicCloudSavesManager {
     // Synchronization to prevent duplicate concurrent syncs
     private val syncMutex = Mutex()
     private val activeSyncs = mutableSetOf<Int>()
+    private val activeCloudSyncPhases = mutableMapOf<Int, Boolean>()
 
     // Data classes for API responses
     data class CloudSaveFiles(
@@ -72,6 +73,10 @@ object EpicCloudSavesManager {
         syncCloudSaves(context, appId, preferredAction = preferredAction)
     }
 
+    suspend fun getActiveCloudSyncPhase(appId: Int): Boolean? = syncMutex.withLock {
+        activeCloudSyncPhases[appId]
+    }
+
     /**
      * Sync cloud saves for a game (bidirectional sync with conflict detection)
      * preferredAction = download -> Force downloads all files and overwrites current files
@@ -93,14 +98,16 @@ object EpicCloudSavesManager {
             activeSyncs.add(appId)
         }
 
-        PluviaApp.events.emit(AndroidEvent.CloudSaveSyncStarted(appId))
         val result = try {
             doSync(context, appId, preferredAction)
         } catch (e: Exception) {
             Timber.tag("Epic").e(e, "[Cloud Saves] Sync failed")
             false
         } finally {
-            syncMutex.withLock { activeSyncs.remove(appId) }
+            syncMutex.withLock {
+                activeSyncs.remove(appId)
+                activeCloudSyncPhases.remove(appId)
+            }
         }
         PluviaApp.events.emit(AndroidEvent.CloudSaveSynced(appId, success = result))
         result
@@ -137,6 +144,7 @@ object EpicCloudSavesManager {
             ?: return false
 
         Timber.tag("Epic").i("[Cloud Saves] Sync action determined: $action")
+        syncMutex.withLock { activeCloudSyncPhases[appId] = action == SyncAction.UPLOAD }
         PluviaApp.events.emit(AndroidEvent.CloudSaveSyncStarted(appId, isUploading = action == SyncAction.UPLOAD))
 
         val result = when (action) {

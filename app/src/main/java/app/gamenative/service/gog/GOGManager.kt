@@ -95,6 +95,7 @@ class GOGManager @Inject constructor(
 
     // Track active sync operations to prevent concurrent syncs
     private val activeSyncs = ConcurrentHashMap.newKeySet<String>()
+    private val activeCloudSyncPhases = ConcurrentHashMap<String, Boolean>()
 
     init {
         // Load persisted cloudsave timestamps on initialization
@@ -1191,12 +1192,19 @@ class GOGManager @Inject constructor(
         return activeSyncs.add(appId)
     }
 
+    fun setActiveCloudSyncPhase(appId: String, isUploading: Boolean) {
+        activeCloudSyncPhases[appId] = isUploading
+    }
+
+    fun getActiveCloudSyncPhase(appId: String): Boolean? = activeCloudSyncPhases[appId]
+
     /**
      * End a sync operation for a game
      * @param appId Game app ID
      */
     fun endSync(appId: String) {
         activeSyncs.remove(appId)
+        activeCloudSyncPhases.remove(appId)
     }
 
     /**

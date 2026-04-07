@@ -373,6 +373,7 @@ class SteamService : Service(), IChallengeUrlChanged {
         }
 
         private val syncInProgressApps = ConcurrentHashMap<Int, AtomicBoolean>()
+        private val activeCloudSyncPhases = ConcurrentHashMap<Int, Boolean>()
 
         private fun getSyncFlag(appId: Int): AtomicBoolean {
             val existing = syncInProgressApps[appId]
@@ -396,6 +397,18 @@ class SteamService : Service(), IChallengeUrlChanged {
                 syncInProgressApps.remove(appId, flag)
             }
         }
+
+        private fun markCloudSyncStarted(appId: Int, isUploading: Boolean) {
+            activeCloudSyncPhases[appId] = isUploading
+            PluviaApp.events.emit(AndroidEvent.CloudSaveSyncStarted(appId, isUploading = isUploading))
+        }
+
+        private fun markCloudSyncFinished(appId: Int, success: Boolean) {
+            activeCloudSyncPhases.remove(appId)
+            PluviaApp.events.emit(AndroidEvent.CloudSaveSynced(appId, success = success))
+        }
+
+        fun getActiveCloudSyncPhase(appId: Int): Boolean? = activeCloudSyncPhases[appId]
 
         // Track whether a game is currently running to prevent premature service stop
         @JvmStatic
@@ -2181,7 +2194,7 @@ class SteamService : Service(), IChallengeUrlChanged {
 
                                         postSyncInfo?.let { info ->
                                             syncResult = info
-                                            PluviaApp.events.emit(AndroidEvent.CloudSaveSynced(appId, success = info.syncResult == SyncResult.Success || info.syncResult == SyncResult.UpToDate))
+                                            markCloudSyncFinished(appId, info.syncResult == SyncResult.Success || info.syncResult == SyncResult.UpToDate)
 
                                             if (info.syncResult == SyncResult.Success || info.syncResult == SyncResult.UpToDate) {
                                                 Timber.i(
@@ -2318,7 +2331,7 @@ class SteamService : Service(), IChallengeUrlChanged {
 
             val result = forceSyncUserFiles(appId = appId, prefixToPath = prefixToPath, preferredSave = preferredSave).await()
             if (result.syncResult == SyncResult.InProgress) {
-                PluviaApp.events.emit(AndroidEvent.CloudSaveSynced(appId, success = false))
+                markCloudSyncFinished(appId, false)
             }
         }
 
@@ -2358,7 +2371,7 @@ class SteamService : Service(), IChallengeUrlChanged {
                             prefixToPath = prefixToPath,
                             overrideLocalChangeNumber = overrideLocalChangeNumber,
                             onPhaseStarted = { isUploading ->
-                                PluviaApp.events.emit(AndroidEvent.CloudSaveSyncStarted(appId, isUploading = isUploading))
+                                markCloudSyncStarted(appId, isUploading)
                             },
                         ).await()
                         if (postSyncInfo != null) {
@@ -2386,7 +2399,7 @@ class SteamService : Service(), IChallengeUrlChanged {
             } finally {
                 releaseSync(appId)
             }
-            PluviaApp.events.emit(AndroidEvent.CloudSaveSynced(appId, success = syncResult.syncResult == SyncResult.Success || syncResult.syncResult == SyncResult.UpToDate))
+            markCloudSyncFinished(appId, syncResult.syncResult == SyncResult.Success || syncResult.syncResult == SyncResult.UpToDate)
             syncResult
         }
 
@@ -2425,7 +2438,7 @@ class SteamService : Service(), IChallengeUrlChanged {
                                             ).await()
 
                                             postSyncInfo?.let { info ->
-                                                PluviaApp.events.emit(AndroidEvent.CloudSaveSynced(appId, success = info.syncResult == SyncResult.Success || info.syncResult == SyncResult.UpToDate))
+                                                markCloudSyncFinished(appId, info.syncResult == SyncResult.Success || info.syncResult == SyncResult.UpToDate)
                                             }
                                             steamCloud.signalAppExitSyncDone(
                                                 appId = appId,

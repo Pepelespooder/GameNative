@@ -38,6 +38,7 @@ import com.winlator.container.ContainerData
 import java.util.Locale
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import app.gamenative.ui.util.SnackbarManager
@@ -208,6 +209,14 @@ class GOGAppScreen : BaseAppScreen() {
 
             val safeLocations = locations.orEmpty()
             if (supportsCloudSaves) {
+                while (true) {
+                    val activePhase = GOGService.getInstance()?.gogManager?.getActiveCloudSyncPhase(libraryItem.appId) ?: break
+                    cloudSaveStatus.value = if (activePhase) CloudSaveStatus.UPLOADING else CloudSaveStatus.DOWNLOADING
+                    syncStateText.value = context.getString(
+                        if (activePhase) R.string.cloud_saves_uploading else R.string.cloud_saves_downloading,
+                    )
+                    delay(250)
+                }
                 cloudSaveStatus.value = CloudSaveStatus.CHECKING
                 syncStateText.value = context.getString(R.string.cloud_saves_checking)
 
