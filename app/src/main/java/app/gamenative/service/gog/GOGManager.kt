@@ -1199,14 +1199,6 @@ class GOGManager @Inject constructor(
     }
 
     /**
-     * End a sync operation for a game
-     * @param appId Game app ID
-     */
-    fun endSync(appId: String) {
-        activeSyncs.remove(appId)
-    }
-
-    /**
      * Load timestamps from disk
      */
     private fun loadCloudSaveTimestampsFromDisk() {

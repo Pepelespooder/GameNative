@@ -2198,8 +2198,6 @@ class SteamService : Service(), IChallengeUrlChanged {
 
                                         postSyncInfo?.let { info ->
                                             syncResult = info
-                                            markCloudSyncFinished(appId, info.syncResult == SyncResult.Success || info.syncResult == SyncResult.UpToDate)
-
                                             if (info.syncResult == SyncResult.Success || info.syncResult == SyncResult.UpToDate) {
                                                 Timber.i(
                                                     "Signaling app launch:\n\tappId: %d\n\tclientId: %s\n\tosType: %s",
@@ -2246,10 +2244,11 @@ class SteamService : Service(), IChallengeUrlChanged {
                     }
                 }
 
-                return@async syncResult
             } finally {
+                markCloudSyncFinished(appId, syncResult.syncResult == SyncResult.Success || syncResult.syncResult == SyncResult.UpToDate)
                 releaseSync(appId)
             }
+            return@async syncResult
         }
 
         /**
@@ -2412,10 +2411,12 @@ class SteamService : Service(), IChallengeUrlChanged {
             } catch (e: Exception) {
                 Timber.e(e, "Force cloud sync failed unexpectedly for appId=$appId")
                 PostSyncInfo(SyncResult.UnknownFail)
+            }
+            try {
+                markCloudSyncFinished(appId, syncResult.syncResult == SyncResult.Success || syncResult.syncResult == SyncResult.UpToDate)
             } finally {
                 releaseSync(appId)
             }
-            markCloudSyncFinished(appId, syncResult.syncResult == SyncResult.Success || syncResult.syncResult == SyncResult.UpToDate)
             syncResult
         }
 
