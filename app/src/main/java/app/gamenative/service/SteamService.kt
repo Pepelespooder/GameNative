@@ -391,7 +391,6 @@ class SteamService : Service(), IChallengeUrlChanged {
         }
 
         private fun markCloudSyncFinished(appId: Int, success: Boolean) {
-            syncInProgressApps.remove(appId)
             PluviaApp.events.emit(
                 AndroidEvent.CloudStatusChanged(
                     appId,
