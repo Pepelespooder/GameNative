@@ -1162,6 +1162,7 @@ class SteamAppScreen : BaseAppScreen() {
                                 MarkerUtils.removeMarker(getAppDirPath(gameId), Marker.STEAM_COLDCLIENT_USED)
 
                                 if (operation == AppOptionMenuType.VerifyFiles) {
+                                    MarkerUtils.clearInstalledPrerequisiteMarkers(getAppDirPath(gameId))
                                     val steamId = SteamService.userSteamId
                                     if (steamId != null) {
                                         val prefixToPath: (String) -> String = { prefix ->
