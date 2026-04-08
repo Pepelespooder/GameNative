@@ -31,17 +31,27 @@ object StorageUtils {
 
     suspend fun getFolderSize(folderPath: String): Long {
         val folder = File(folderPath)
-        if (folder.exists()) {
-            var bytes = 0L
-            val tree = folder.walk()
-            tree.forEach {
-                bytes += it.length()
+        if (!folder.isDirectory) return 0L
+
+        suspend fun accumulateSize(current: File): Long {
+            if (current.isFile) return current.length()
+            if (!current.isDirectory) return 0L
+
+            val children = current.listFiles() ?: return 0L
+            var total = 0L
+            for (child in children) {
+                total += accumulateSize(child)
                 // allow interruption if run as coroutine
                 yield()
             }
-            return bytes
+            return total
         }
-        return 0L
+
+        return runCatching {
+            accumulateSize(folder)
+        }.onFailure {
+            Timber.w(it, "Failed to calculate folder size for $folderPath")
+        }.getOrDefault(0L)
     }
 
     fun formatBinarySize(bytes: Long, decimalPlaces: Int = 2): String {

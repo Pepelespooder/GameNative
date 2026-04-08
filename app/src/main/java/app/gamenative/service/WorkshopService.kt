@@ -291,25 +291,26 @@ object WorkshopService {
         onState?.invoke(WorkshopDownloadState(stage = "Subscribing"))
         subscribe(appId, item.publishedFileId)
 
-        withContext(Dispatchers.IO) {
-            onState?.invoke(WorkshopDownloadState(stage = "Preparing download"))
-            val container = ContainerUtils.getOrCreateContainer(context, containerAppId)
-            val winePrefix = container.rootDir.absolutePath + "/.wine"
-            val workshopContentDir = WorkshopSyncManager.getWorkshopContentDir(winePrefix, appId)
-            onState?.invoke(WorkshopDownloadState(stage = "Fetching metadata"))
-            val detail = getSubscriptionDetails(appId, item.publishedFileId, item)
-            persistLocalUiMetadata(
-                context = context,
-                containerAppId = containerAppId,
-                appId = appId,
-                items = listOf(item),
-            )
-            val steamClient = SteamService.instance?.steamClient
-                ?: error("Steam client unavailable for workshop download")
-            val licenses = SteamService.getLicensesFromDb()
-            if (licenses.isEmpty()) {
-                error("No Steam licenses available for workshop download")
-            }
+        try {
+            withContext(Dispatchers.IO) {
+                onState?.invoke(WorkshopDownloadState(stage = "Preparing download"))
+                val container = ContainerUtils.getOrCreateContainer(context, containerAppId)
+                val winePrefix = container.rootDir.absolutePath + "/.wine"
+                val workshopContentDir = WorkshopSyncManager.getWorkshopContentDir(winePrefix, appId)
+                onState?.invoke(WorkshopDownloadState(stage = "Fetching metadata"))
+                val detail = getSubscriptionDetails(appId, item.publishedFileId, item)
+                persistLocalUiMetadata(
+                    context = context,
+                    containerAppId = containerAppId,
+                    appId = appId,
+                    items = listOf(item),
+                )
+                val steamClient = SteamService.instance?.steamClient
+                    ?: error("Steam client unavailable for workshop download")
+                val licenses = SteamService.getLicensesFromDb()
+                if (licenses.isEmpty()) {
+                    error("No Steam licenses available for workshop download")
+                }
 
             onState?.invoke(WorkshopDownloadState(stage = "Starting download"))
             val downloadedCount = WorkshopSyncManager.downloadItems(
@@ -332,29 +333,46 @@ object WorkshopService {
                 error("Workshop download did not complete for ${item.publishedFileId}")
             }
 
-            onState?.invoke(
-                WorkshopDownloadState(
-                    downloadedBytes = detail.fileSizeBytes,
-                    totalBytes = detail.fileSizeBytes,
-                    stage = "Installing",
-                ),
-            )
-            WorkshopSyncManager.finalizeDownloadedItems(listOf(detail), workshopContentDir)
-            WorkshopSyncManager.updateMarkerTimestamps(listOf(detail), workshopContentDir)
-            onState?.invoke(
-                WorkshopDownloadState(
-                    downloadedBytes = detail.fileSizeBytes,
-                    totalBytes = detail.fileSizeBytes,
-                    stage = "Configuring",
-                ),
-            )
-            WorkshopSyncManager.configureModSymlinks(
-                gameRootDir = java.io.File(SteamService.getAppDirPath(appId)),
-                workshopContentDir = workshopContentDir,
-                items = getSubscriptionDetailsList(appId),
-                winePrefix = winePrefix,
-                gameName = SteamService.getAppInfoOf(appId)?.name ?: "",
-            )
+                onState?.invoke(
+                    WorkshopDownloadState(
+                        downloadedBytes = detail.fileSizeBytes,
+                        totalBytes = detail.fileSizeBytes,
+                        stage = "Installing",
+                    ),
+                )
+                WorkshopSyncManager.finalizeDownloadedItems(listOf(detail), workshopContentDir)
+                WorkshopSyncManager.updateMarkerTimestamps(listOf(detail), workshopContentDir)
+                onState?.invoke(
+                    WorkshopDownloadState(
+                        downloadedBytes = detail.fileSizeBytes,
+                        totalBytes = detail.fileSizeBytes,
+                        stage = "Configuring",
+                    ),
+                )
+                WorkshopSyncManager.configureModSymlinks(
+                    gameRootDir = java.io.File(SteamService.getAppDirPath(appId)),
+                    workshopContentDir = workshopContentDir,
+                    items = getSubscriptionDetailsList(appId),
+                    winePrefix = winePrefix,
+                    gameName = SteamService.getAppInfoOf(appId)?.name ?: "",
+                )
+            }
+        } catch (t: Throwable) {
+            runCatching {
+                unsubscribeAndSync(
+                    context = context,
+                    containerAppId = containerAppId,
+                    appId = appId,
+                    publishedFileId = item.publishedFileId,
+                )
+            }.onFailure {
+                Log.w(
+                    "WorkshopService",
+                    "Failed rolling back workshop subscribe for $appId/${item.publishedFileId}",
+                    it,
+                )
+            }
+            throw t
         }
     }
 

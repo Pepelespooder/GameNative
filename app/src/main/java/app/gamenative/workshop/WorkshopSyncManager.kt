@@ -17,6 +17,7 @@ import `in`.dragonbra.javasteam.types.SteamID
 import java.io.BufferedOutputStream
 import java.io.File
 import java.nio.file.Files
+import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.CancellationException
@@ -48,7 +49,7 @@ data class WorkshopItemSubscription(
     val previewUrl: String = "",
 )
 
-data class WorkshopFetchResult(
+data class WorkshopSubscriptionFetchResult(
     val items: List<WorkshopItemSubscription>,
     val succeeded: Boolean,
     val isComplete: Boolean = false,
@@ -90,9 +91,9 @@ object WorkshopSyncManager {
         appId: Int,
         steamClient: SteamClient,
         steamId: SteamID,
-    ): WorkshopFetchResult {
+    ): WorkshopSubscriptionFetchResult {
         val unifiedMessages = steamClient.getHandler(SteamUnifiedMessages::class.java)
-            ?: return WorkshopFetchResult(emptyList(), succeeded = false)
+            ?: return WorkshopSubscriptionFetchResult(emptyList(), succeeded = false)
         val publishedFile = unifiedMessages.createService(PublishedFile::class.java)
         val allItems = mutableListOf<WorkshopItemSubscription>()
         var fetchedAtLeastOnePage = false
@@ -110,7 +111,7 @@ object WorkshopSyncManager {
             page++
         }
 
-        return WorkshopFetchResult(allItems, fetchedAtLeastOnePage, allPagesSucceeded)
+        return WorkshopSubscriptionFetchResult(allItems, fetchedAtLeastOnePage, allPagesSucceeded)
     }
 
     fun cleanupUnsubscribedItems(
@@ -348,13 +349,14 @@ object WorkshopSyncManager {
         val fixedTotalBytes = items.sumOf { it.fileSizeBytes }
         val bytesDownloadedMap = ConcurrentHashMap<Long, Long>()
         val concurrentLimit = when (PrefManager.downloadSpeed) {
-            8 -> 2
-            16 -> 3
-            24 -> 4
-            32 -> 6
-            else -> 3
+            8 -> 3
+            16 -> 5
+            24 -> 7
+            32 -> 10
+            else -> 5
         }
         val downloadSemaphore = Semaphore(concurrentLimit)
+        val previewJobs = Collections.synchronizedList(mutableListOf<kotlinx.coroutines.Deferred<Unit>>())
         patchSupportedWorkshopFileTypes()
         val (maxDownloads, maxDecompress) = computeDownloadThreads(concurrentLimit)
 
@@ -362,7 +364,7 @@ object WorkshopSyncManager {
 
         val jobs = items.map { item ->
             async {
-                downloadSemaphore.withPermit {
+                val downloaded = downloadSemaphore.withPermit {
                     val itemDir = File(workshopContentDir, item.publishedFileId.toString())
                     val completeMarker = File(itemDir, COMPLETE_MARKER)
                     try {
@@ -382,11 +384,6 @@ object WorkshopSyncManager {
                         completeMarker.writeText(item.timeUpdated.toString())
                         val done = completedCount.incrementAndGet()
                         onItemProgress(done, totalItems, item.title)
-                        runCatching {
-                            downloadPreviewImage(item, itemDir)
-                        }.onFailure {
-                            Timber.tag(TAG).d(it, "Preview download skipped for ${item.publishedFileId}")
-                        }
                         true
                     } catch (e: CancellationException) {
                         throw e
@@ -395,10 +392,23 @@ object WorkshopSyncManager {
                         false
                     }
                 }
+                if (downloaded) {
+                    val itemDir = File(workshopContentDir, item.publishedFileId.toString())
+                    previewJobs.add(async(Dispatchers.IO) {
+                        runCatching {
+                            downloadPreviewImage(item, itemDir)
+                        }.onFailure {
+                            Timber.tag(TAG).d(it, "Preview download skipped for ${item.publishedFileId}")
+                        }
+                        Unit
+                    })
+                }
+                downloaded
             }
         }
 
         jobs.awaitAll()
+        previewJobs.toList().awaitAll()
         completedCount.get()
     }
 
@@ -523,8 +533,16 @@ object WorkshopSyncManager {
         }
         val isHaydee = workshopContentDir.name == "530890" || gameName.contains("haydee", ignoreCase = true)
         val isBrotato = workshopContentDir.name == "1942280" || gameName.contains("brotato", ignoreCase = true)
+        val isEndlessLegend = workshopContentDir.name == "289130" || gameName.contains("endless legend", ignoreCase = true)
+        val isNoita = workshopContentDir.name == "881100" || gameName.contains("noita", ignoreCase = true)
+        val effectiveModDirs = if (isNoita) {
+            modDirs.map(::resolveNoitaModRoot)
+        } else {
+            modDirs
+        }
         val willUseFilesystemMods =
             isHaydee || (
+                !isEndlessLegend &&
                 !isBrotato &&
                 routing.strategy is WorkshopModPathStrategy.SymlinkIntoDir &&
                     routing.confidence == WorkshopModPathDetector.Confidence.HIGH
@@ -542,14 +560,14 @@ object WorkshopSyncManager {
                 val modsDir = File(settingsDir, "mods")
                 if (!willUseFilesystemMods) {
                     recreateModsDir(modsDir)
-                    modDirs.forEach { itemDir ->
+                    effectiveModDirs.forEach { itemDir ->
                         runCatching {
                             Files.createSymbolicLink(File(modsDir, itemDir.name).toPath(), itemDir.toPath())
                         }.onFailure {
                             Timber.tag(TAG).w(it, "Failed creating workshop symlink for ${itemDir.name}")
                         }
                     }
-                    writeWorkshopMetadata(settingsDir, modDirs, items)
+                    writeWorkshopMetadata(settingsDir, effectiveModDirs, items)
                 } else {
                     if (modsDir.isDirectory) {
                         modsDir.listFiles()?.forEach { entry ->
@@ -569,7 +587,7 @@ object WorkshopSyncManager {
             globalSettingsDir.mkdirs()
             ensureSteamAppId(globalSettingsDir, workshopContentDir.name)
             if (!willUseFilesystemMods) {
-                writeWorkshopMetadata(globalSettingsDir, modDirs, items)
+                writeWorkshopMetadata(globalSettingsDir, effectiveModDirs, items)
             } else {
                 File(globalSettingsDir, "mods.json").writeText("{}")
                 File(globalSettingsDir, "subscribed_ids.txt").delete()
@@ -586,14 +604,18 @@ object WorkshopSyncManager {
 
         if (winePrefix.isNotBlank()) {
             if (isHaydee) {
-                syncHaydeeWorkshopMods(gameRootDir, modDirs)
+                syncHaydeeWorkshopMods(gameRootDir, effectiveModDirs)
             } else if (!isBrotato && routing.strategy !is WorkshopModPathStrategy.Standard) {
-                val titlesByItemId = items.associate { it.publishedFileId to it.title }
+                val titlesByItemId = if (isNoita) {
+                    resolveNoitaModNames(effectiveModDirs, items)
+                } else {
+                    items.associate { it.publishedFileId to it.title }
+                }
                 val symlinker = WorkshopSymlinker()
                 symlinker.sync(
                     strategy = routing.strategy,
                     activeItemDirs = linkedMapOf<Long, File>().apply {
-                        modDirs.forEach { put(it.name.toLong(), it) }
+                        effectiveModDirs.forEach { put(it.name.toLong(), it) }
                     },
                     workshopContentBase = workshopContentDir,
                     itemTitles = titlesByItemId,
@@ -655,9 +677,10 @@ object WorkshopSyncManager {
                 gameName = gameName,
                 developerName = developerName,
             )
+            val isEndlessLegend = workshopContentDir.name == "289130" || gameName.contains("endless legend", ignoreCase = true)
             if (isHaydee) {
                 syncHaydeeWorkshopMods(gameRootDir, emptyList())
-            } else if (routing.strategy !is WorkshopModPathStrategy.Standard) {
+            } else if (!isEndlessLegend && routing.strategy !is WorkshopModPathStrategy.Standard) {
                 val symlinker = WorkshopSymlinker()
                 symlinker.sync(
                     strategy = routing.strategy,
@@ -1047,6 +1070,40 @@ object WorkshopSyncManager {
         }
     }
 
+    private fun resolveNoitaModNames(
+        modDirs: List<File>,
+        items: List<WorkshopItemSubscription>,
+    ): Map<Long, String> {
+        val fallbackTitles = items.associate { it.publishedFileId to it.title }
+        return buildMap {
+            modDirs.forEach { itemDir ->
+                val id = itemDir.name.toLongOrNull() ?: return@forEach
+                val modId = runCatching {
+                    File(itemDir, "mod_id.txt")
+                        .takeIf { it.isFile }
+                        ?.readText()
+                        ?.trim()
+                        ?.takeIf { it.isNotBlank() }
+                }.getOrNull()
+                put(id, modId ?: fallbackTitles[id].orEmpty())
+            }
+        }
+    }
+
+    private fun resolveNoitaModRoot(itemDir: File): File {
+        val modId = runCatching {
+            File(itemDir, "mod_id.txt")
+                .takeIf { it.isFile }
+                ?.readText()
+                ?.trim()
+                ?.takeIf { it.isNotBlank() }
+        }.getOrNull()
+        if (modId.isNullOrBlank()) return itemDir
+
+        val nestedDir = File(itemDir, "Mods/$modId")
+        return if (nestedDir.isDirectory) nestedDir else itemDir
+    }
+
     fun extractCkmFiles(workshopContentDir: File) {
         if (!workshopContentDir.exists()) return
         var extractedCount = 0
@@ -1376,25 +1433,27 @@ object WorkshopSyncManager {
         var decompressRatio = 0.5
         when (PrefManager.downloadSpeed) {
             8 -> {
-                downloadRatio = 0.9
-                decompressRatio = 0.3
+                downloadRatio = 1.4
+                decompressRatio = 0.45
             }
             16 -> {
-                downloadRatio = 1.5
-                decompressRatio = 0.5
+                downloadRatio = 2.4
+                decompressRatio = 0.75
             }
             24 -> {
-                downloadRatio = 2.0
-                decompressRatio = 0.65
+                downloadRatio = 4.0
+                decompressRatio = 1.1
             }
             32 -> {
-                downloadRatio = 3.0
-                decompressRatio = 1.0
+                downloadRatio = 6.0
+                decompressRatio = 1.8
             }
         }
         val cpuCores = Runtime.getRuntime().availableProcessors()
-        val maxDownloads = ((cpuCores * downloadRatio).toInt() / concurrentLimit).coerceAtLeast(1)
-        val maxDecompress = ((cpuCores * decompressRatio).toInt() / concurrentLimit).coerceAtLeast(1)
+        val maxDownloads = ((cpuCores * downloadRatio).toInt() / concurrentLimit)
+            .coerceAtLeast(if (concurrentLimit >= 7) 2 else 1)
+        val maxDecompress = ((cpuCores * decompressRatio).toInt() / concurrentLimit)
+            .coerceAtLeast(if (concurrentLimit >= 10) 2 else 1)
         return maxDownloads to maxDecompress
     }
 

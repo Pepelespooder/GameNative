@@ -42,6 +42,10 @@ import com.winlator.core.GPUInformation
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
+import java.time.Instant
+import java.time.LocalDate
+import java.time.OffsetDateTime
+import java.time.ZoneOffset
 import java.util.EnumSet
 import javax.inject.Inject
 import kotlin.math.max
@@ -60,6 +64,7 @@ import timber.log.Timber
 @HiltViewModel
 class LibraryViewModel @Inject constructor(
     private val steamAppDao: SteamAppDao,
+    private val steamLicenseDao: app.gamenative.db.dao.SteamLicenseDao,
     private val gogGameDao: GOGGameDao,
     private val epicGameDao: EpicGameDao,
     private val amazonGameDao: AmazonGameDao,
@@ -67,6 +72,7 @@ class LibraryViewModel @Inject constructor(
 ) : ViewModel() {
     companion object {
         private const val WORKSHOP_SUPPORT_CACHE_VERSION = 2
+        private const val STEAM_RECENT_ACTIVITY_CACHE_MS = 5 * 60 * 1000L
     }
 
     private val _state = MutableStateFlow(LibraryState(isLoading = true))
@@ -122,6 +128,8 @@ class LibraryViewModel @Inject constructor(
 
     private val workshopSupportCache = mutableMapOf<Int, Boolean>()
     private val workshopSupportPending = mutableSetOf<Int>()
+    private var steamRecentActivityCache = emptyMap<Int, app.gamenative.data.OwnedGames>()
+    private var steamRecentActivityCacheAt = 0L
 
     init {
         viewModelScope.launch(Dispatchers.IO) {
@@ -305,6 +313,8 @@ class LibraryViewModel @Inject constructor(
     fun onRefresh() {
         viewModelScope.launch {
             _state.update { it.copy(isRefreshing = true) }
+            steamRecentActivityCache = emptyMap()
+            steamRecentActivityCacheAt = 0L
 
             // Clear compatibility cache on manual refresh to get fresh data
             GameCompatibilityCache.clear()
@@ -365,6 +375,7 @@ class LibraryViewModel @Inject constructor(
 
             val currentState = _state.value
             val currentFilter = AppFilter.getAppType(currentState.appInfoSortType)
+            val steamRecentActivity = getSteamRecentActivity()
 
             // Fetch download directory apps once on IO thread and cache as a HashSet for O(1) lookups
             val downloadDirectoryApps = DownloadService.getDownloadDirectoryApps()
@@ -466,8 +477,15 @@ class LibraryViewModel @Inject constructor(
                 .toList()
 
             // Map Steam apps to UI items
-            data class LibraryEntry(val item: LibraryItem, val isInstalled: Boolean)
+            data class LibraryEntry(
+                val item: LibraryItem,
+                val isInstalled: Boolean,
+                val recentlyPlayedAt: Long = 0L,
+                val recentlyAddedAt: Long = 0L,
+            )
             val licensedDepotMap = SteamService.buildLicensedDepotMap(filteredSteamApps)
+            val steamPackageIds = filteredSteamApps.mapNotNull { it.packageId.takeIf { pkg -> pkg != SteamService.INVALID_PKG_ID } }.distinct()
+            val steamLicenseByPackageId = steamLicenseDao.findLicenses(steamPackageIds).associateBy { it.packageId }
             val steamEntries: List<LibraryEntry> = filteredSteamApps.map { item ->
                 val isInstalled = downloadDirectorySet.contains(SteamService.getAppDirName(item))
                 val installedBranch = if (isInstalled) {
@@ -494,6 +512,8 @@ class LibraryViewModel @Inject constructor(
                         sizeBytes = totalSizeBytes,
                     ),
                     isInstalled = isInstalled,
+                    recentlyPlayedAt = steamRecentActivity[item.id]?.rtimeLastPlayed?.toLong()?.times(1000L) ?: 0L,
+                    recentlyAddedAt = steamLicenseByPackageId[item.packageId]?.timeCreated?.time ?: 0L,
                 )
             }
 
@@ -547,6 +567,8 @@ class LibraryViewModel @Inject constructor(
                         gameSource = GameSource.GOG,
                     ),
                     isInstalled = game.isInstalled,
+                    recentlyPlayedAt = game.lastPlayed,
+                    recentlyAddedAt = parseSortTimestamp(game.releaseDate),
                 )
             }
 
@@ -587,6 +609,8 @@ class LibraryViewModel @Inject constructor(
                         gameSource = GameSource.EPIC,
                     ),
                     isInstalled = game.isInstalled,
+                    recentlyPlayedAt = game.lastPlayed,
+                    recentlyAddedAt = parseSortTimestamp(game.releaseDate),
                 )
             }
 
@@ -630,6 +654,9 @@ class LibraryViewModel @Inject constructor(
                         gameSource = GameSource.AMAZON,
                     ),
                     isInstalled = game.isInstalled,
+                    recentlyPlayedAt = game.lastPlayed,
+                    recentlyAddedAt = parseSortTimestamp(game.purchasedDate).takeIf { it > 0L }
+                        ?: parseSortTimestamp(game.releaseDate),
                 )
             }
 
@@ -694,8 +721,15 @@ class LibraryViewModel @Inject constructor(
                 SortOption.NAME_DESC -> compareByDescending { it.item.name.lowercase() }
 
                 SortOption.RECENTLY_PLAYED -> compareBy<LibraryEntry> { entry ->
-                    if (entry.isInstalled) 0 else 1
-                }.thenBy { it.item.name.lowercase() }
+                    if (entry.recentlyPlayedAt > 0L) 0 else 1
+                }.thenByDescending { it.recentlyPlayedAt }
+                    .thenBy { if (it.isInstalled) 0 else 1 }
+                    .thenBy { it.item.name.lowercase() }
+
+                SortOption.RECENTLY_ADDED -> compareBy<LibraryEntry> { entry ->
+                    if (entry.recentlyAddedAt > 0L) 0 else 1
+                }.thenByDescending { it.recentlyAddedAt }
+                    .thenBy { it.item.name.lowercase() }
 
                 SortOption.SIZE_SMALLEST -> compareBy<LibraryEntry> { it.item.sizeBytes }
                     .thenBy { it.item.name.lowercase() }
@@ -757,6 +791,35 @@ class LibraryViewModel @Inject constructor(
                 )
             }
         }
+    }
+
+    private suspend fun getSteamRecentActivity(): Map<Int, app.gamenative.data.OwnedGames> {
+        val now = System.currentTimeMillis()
+        if (steamRecentActivityCache.isNotEmpty() && now - steamRecentActivityCacheAt < STEAM_RECENT_ACTIVITY_CACHE_MS) {
+            return steamRecentActivityCache
+        }
+
+        val steamId = SteamService.userSteamId?.convertToUInt64() ?: return emptyMap()
+        val ownedGames = runCatching {
+            SteamService.getOwnedGames(steamId)
+        }.onFailure {
+            Timber.tag("LibraryViewModel").w(it, "Failed to fetch Steam recent activity")
+        }.getOrDefault(emptyList())
+
+        val cache = ownedGames.associateBy { it.appId }
+        steamRecentActivityCache = cache
+        steamRecentActivityCacheAt = now
+        return cache
+    }
+
+    private fun parseSortTimestamp(raw: String?): Long {
+        val value = raw?.trim().orEmpty()
+        if (value.isEmpty()) return 0L
+
+        return runCatching { Instant.parse(value).toEpochMilli() }
+            .recoverCatching { OffsetDateTime.parse(value).toInstant().toEpochMilli() }
+            .recoverCatching { LocalDate.parse(value).atStartOfDay().toInstant(ZoneOffset.UTC).toEpochMilli() }
+            .getOrDefault(0L)
     }
 
     private fun getCachedWorkshopSupport(appId: Int): Boolean? {

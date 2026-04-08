@@ -22,12 +22,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.net.toUri
+import app.gamenative.BuildConfig
 import app.gamenative.PluviaApp
 import app.gamenative.R
 import app.gamenative.data.GameSource
 import app.gamenative.data.LibraryItem
 import app.gamenative.events.AndroidEvent
 import app.gamenative.ui.component.dialog.ContainerConfigDialog
+import app.gamenative.ui.component.dialog.ShortcutIconChooserDialog
 import app.gamenative.ui.data.AppMenuOption
 import app.gamenative.ui.data.GameDisplayInfo
 import app.gamenative.ui.data.GameHeaderAction
@@ -40,6 +42,7 @@ import app.gamenative.utils.ContainerUtils
 import app.gamenative.utils.GameCompatibilityCache
 import app.gamenative.utils.GameCompatibilityService
 import app.gamenative.utils.ManifestInstaller
+import app.gamenative.utils.SteamGridDB
 import app.gamenative.utils.createPinnedShortcut
 import kotlinx.coroutines.CancellationException
 import com.winlator.container.ContainerData
@@ -492,11 +495,44 @@ abstract class BaseAppScreen {
         val gameSource = getGameSource(libraryItem)
         val gameId = getGameId(libraryItem)
         val gameName = getGameName(context, libraryItem)
+        val shortcutSearchName = getShortcutSearchName(context, libraryItem)
+        val shortcutSearchSteamAppId = getShortcutSearchSteamAppId(context, libraryItem)
         val iconUrl = getIconUrl(context, libraryItem)
+        val hasSteamGridDbKey = remember { BuildConfig.STEAMGRIDDB_API_KEY.isNotBlank() }
+        var showShortcutChooser by remember { mutableStateOf(false) }
+        var isLoadingShortcutIcons by remember(showShortcutChooser) { mutableStateOf(false) }
+        var shortcutIcons by remember(showShortcutChooser) {
+            mutableStateOf<List<SteamGridDB.ShortcutIconOption>>(emptyList())
+        }
 
-        return AppMenuOption(
-            optionType = AppOptionMenuType.CreateShortcut,
-            onClick = {
+        LaunchedEffect(showShortcutChooser, shortcutSearchName, shortcutSearchSteamAppId) {
+            if (!showShortcutChooser) return@LaunchedEffect
+            if (!hasSteamGridDbKey) {
+                shortcutIcons = emptyList()
+                isLoadingShortcutIcons = false
+                return@LaunchedEffect
+            }
+            isLoadingShortcutIcons = true
+            shortcutIcons = SteamGridDB.fetchShortcutIcons(
+                gameName = shortcutSearchName,
+                steamAppId = shortcutSearchSteamAppId,
+            )
+            isLoadingShortcutIcons = false
+        }
+
+        ShortcutIconChooserDialog(
+            openDialog = showShortcutChooser,
+            icons = shortcutIcons,
+            defaultIconUrl = iconUrl,
+            isLoading = isLoadingShortcutIcons,
+            emptyMessage = if (hasSteamGridDbKey) {
+                context.getString(R.string.shortcut_icon_dialog_no_icons)
+            } else {
+                context.getString(R.string.shortcut_icon_dialog_missing_api_key)
+            },
+            onDismiss = { showShortcutChooser = false },
+            onConfirm = { selectedIconUrl ->
+                showShortcutChooser = false
                 CoroutineScope(Dispatchers.IO).launch {
                     try {
                         createPinnedShortcut(
@@ -504,7 +540,7 @@ abstract class BaseAppScreen {
                             gameId = gameId,
                             label = gameName,
                             gameSource = gameSource,
-                            iconUrl = iconUrl,
+                            iconUrl = selectedIconUrl,
                         )
                         SnackbarManager.show(context.getString(R.string.base_app_shortcut_created))
                     } catch (e: Exception) {
@@ -513,7 +549,23 @@ abstract class BaseAppScreen {
                 }
             },
         )
+
+        return AppMenuOption(
+            optionType = AppOptionMenuType.CreateShortcut,
+            onClick = { showShortcutChooser = true },
+        )
     }
+
+    @Composable
+    protected open fun getShortcutSearchName(
+        context: Context,
+        libraryItem: LibraryItem,
+    ): String = getGameName(context, libraryItem)
+
+    protected open fun getShortcutSearchSteamAppId(
+        context: Context,
+        libraryItem: LibraryItem,
+    ): Int? = null
 
     /**
      * Get source-specific menu options. Subclasses can override to add custom options.

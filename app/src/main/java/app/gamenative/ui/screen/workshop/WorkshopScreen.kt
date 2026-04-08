@@ -365,7 +365,7 @@ fun WorkshopScreen(
             optimisticSubscribedIds.add(item.publishedFileId)
         }
         subscribedItems = (subscribedItems + item).distinctBy { it.publishedFileId }
-        val success = runCatching {
+        val success = try {
             WorkshopService.subscribeAndSync(
                 context = context,
                 containerAppId = containerAppId,
@@ -375,7 +375,13 @@ fun WorkshopScreen(
                     downloadProgress[item.publishedFileId] = state
                 },
             )
-        }.isSuccess
+            true
+        } catch (_: Throwable) {
+            false
+        } finally {
+            downloadProgress.remove(item.publishedFileId)
+            busyIds.remove(item.publishedFileId)
+        }
         if (success) {
             refreshSubscriptions()
         } else {
@@ -383,10 +389,9 @@ fun WorkshopScreen(
             if (!wasAlreadySubscribed) {
                 subscribedItems = subscribedItems.filterNot { it.publishedFileId == item.publishedFileId }
             }
+            refreshSubscriptions()
             SnackbarManager.show("Failed to subscribe ${item.title.ifBlank { item.publishedFileId.toString() }}")
         }
-        downloadProgress.remove(item.publishedFileId)
-        busyIds.remove(item.publishedFileId)
         return success
     }
 

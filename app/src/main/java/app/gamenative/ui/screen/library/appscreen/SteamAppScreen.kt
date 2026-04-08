@@ -10,16 +10,28 @@ import android.os.Environment
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -31,13 +43,18 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.core.content.ContextCompat
 import app.gamenative.PluviaApp
 
+import app.gamenative.BuildConfig
 import app.gamenative.R
 import app.gamenative.data.LibraryItem
 import app.gamenative.enums.Marker
@@ -49,6 +66,7 @@ import app.gamenative.service.SteamService
 import app.gamenative.service.SteamService.Companion.getAppDirPath
 import app.gamenative.ui.component.dialog.MessageDialog
 import app.gamenative.ui.component.dialog.LoadingDialog
+import app.gamenative.ui.component.dialog.ShortcutIconChooserDialog
 import app.gamenative.ui.component.dialog.state.MessageDialogState
 import app.gamenative.ui.data.AppMenuOption
 import app.gamenative.ui.data.GameDisplayInfo
@@ -59,12 +77,15 @@ import app.gamenative.ui.screen.workshop.WorkshopScreen
 import app.gamenative.service.WorkshopService
 import app.gamenative.utils.ContainerUtils
 import app.gamenative.utils.MarkerUtils
+import app.gamenative.utils.SteamGridDB
 import app.gamenative.utils.SteamUtils
 import app.gamenative.utils.StorageUtils
 import app.gamenative.workshop.WorkshopManager
 import app.gamenative.NetworkMonitor
 import com.google.android.play.core.splitcompat.SplitCompat
 import com.posthog.PostHog
+import com.skydoves.landscapist.ImageOptions
+import com.skydoves.landscapist.coil.CoilImage
 import com.winlator.container.ContainerData
 import com.winlator.container.ContainerManager
 import com.winlator.fexcore.FEXCoreManager
@@ -82,6 +103,7 @@ import app.gamenative.ui.screen.library.GameMigrationDialog
 import app.gamenative.ui.component.dialog.state.GameManagerDialogState
 import app.gamenative.ui.util.SnackbarManager
 import app.gamenative.utils.ContainerUtils.getContainer
+import app.gamenative.utils.createPinnedShortcut
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import timber.log.Timber
@@ -371,6 +393,17 @@ class SteamAppScreen : BaseAppScreen() {
     override fun isInstalled(context: Context, libraryItem: LibraryItem): Boolean {
         return SteamService.isAppInstalled(libraryItem.gameId)
     }
+
+    @Composable
+    protected override fun getCreateShortcutOption(
+        context: Context,
+        libraryItem: LibraryItem,
+    ): AppMenuOption? = super.getCreateShortcutOption(context, libraryItem)
+
+    override fun getShortcutSearchSteamAppId(
+        context: Context,
+        libraryItem: LibraryItem,
+    ): Int? = getGameId(libraryItem)
 
     override fun isValidToDownload(context: Context, libraryItem: LibraryItem): Boolean {
         val appInfo = SteamService.getAppInfoOf(libraryItem.gameId) ?: return false
