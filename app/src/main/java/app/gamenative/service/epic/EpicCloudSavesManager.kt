@@ -35,8 +35,7 @@ object EpicCloudSavesManager {
 
     // Synchronization to prevent duplicate concurrent syncs
     private val syncMutex = Mutex()
-    private val activeSyncs = mutableSetOf<Int>()
-    private val activeCloudSyncPhases = mutableMapOf<Int, Boolean>()
+    private val activeSyncs = mutableMapOf<Int, CloudSaveStatus>()
 
     // Data classes for API responses
     data class CloudSaveFiles(
@@ -74,9 +73,7 @@ object EpicCloudSavesManager {
         syncCloudSaves(context, appId, preferredAction = preferredAction)
     }
 
-    suspend fun getActiveCloudSyncPhase(appId: Int): Boolean? = syncMutex.withLock {
-        activeCloudSyncPhases[appId]
-    }
+    suspend fun getActiveCloudSyncStatus(appId: Int): CloudSaveStatus? = syncMutex.withLock { activeSyncs[appId] }
 
     /**
      * Sync cloud saves for a game (bidirectional sync with conflict detection)
@@ -92,11 +89,11 @@ object EpicCloudSavesManager {
     ): Boolean = withContext(Dispatchers.IO) {
         // Check if sync is already in progress for this appId
         syncMutex.withLock {
-            if (activeSyncs.contains(appId)) {
+            if (activeSyncs.containsKey(appId)) {
                 Timber.tag("Epic").w("[Cloud Saves] Sync already in progress for $appId, skipping duplicate request")
                 return@withContext false
             }
-            activeSyncs.add(appId)
+            activeSyncs[appId] = CloudSaveStatus.CHECKING
         }
 
         val finalStatus = try {
@@ -107,7 +104,6 @@ object EpicCloudSavesManager {
         } finally {
             syncMutex.withLock {
                 activeSyncs.remove(appId)
-                activeCloudSyncPhases.remove(appId)
             }
         }
         PluviaApp.events.emit(AndroidEvent.CloudStatusChanged(appId, finalStatus))
@@ -148,12 +144,12 @@ object EpicCloudSavesManager {
 
         val result = when (action) {
             SyncAction.DOWNLOAD -> {
-                syncMutex.withLock { activeCloudSyncPhases[appId] = false }
+                syncMutex.withLock { activeSyncs[appId] = CloudSaveStatus.DOWNLOADING }
                 PluviaApp.events.emit(AndroidEvent.CloudStatusChanged(appId, CloudSaveStatus.DOWNLOADING))
                 downloadSaves(context, appId, creds.accountId)
             }
             SyncAction.UPLOAD -> {
-                syncMutex.withLock { activeCloudSyncPhases[appId] = true }
+                syncMutex.withLock { activeSyncs[appId] = CloudSaveStatus.UPLOADING }
                 PluviaApp.events.emit(AndroidEvent.CloudStatusChanged(appId, CloudSaveStatus.UPLOADING))
                 uploadSaves(context, creds.accountId, game)
             }

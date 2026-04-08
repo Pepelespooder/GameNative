@@ -21,6 +21,7 @@ import app.gamenative.enums.OS
 import app.gamenative.enums.PathType
 import app.gamenative.enums.ReleaseState
 import app.gamenative.enums.SyncResult
+import app.gamenative.ui.data.CloudSaveStatus
 import app.gamenative.utils.ContainerUtils
 import app.gamenative.utils.FileUtils
 import app.gamenative.utils.MarkerUtils
@@ -94,8 +95,7 @@ class GOGManager @Inject constructor(
     private val timestampFile = File(context.filesDir, "gog_sync_timestamps.json")
 
     // Track active sync operations to prevent concurrent syncs
-    private val activeSyncs = ConcurrentHashMap.newKeySet<String>()
-    private val activeCloudSyncPhases = ConcurrentHashMap<String, Boolean>()
+    private val activeSyncs = ConcurrentHashMap<String, CloudSaveStatus>()
 
     init {
         // Load persisted cloudsave timestamps on initialization
@@ -1189,14 +1189,14 @@ class GOGManager @Inject constructor(
      * @return true if sync can proceed, false if one is already in progress
      */
     fun startSync(appId: String): Boolean {
-        return activeSyncs.add(appId)
+        return activeSyncs.putIfAbsent(appId, CloudSaveStatus.CHECKING) == null
     }
 
-    fun setActiveCloudSyncPhase(appId: String, isUploading: Boolean) {
-        activeCloudSyncPhases[appId] = isUploading
-    }
+    fun getActiveCloudSyncStatus(appId: String): CloudSaveStatus? = activeSyncs[appId]
 
-    fun getActiveCloudSyncPhase(appId: String): Boolean? = activeCloudSyncPhases[appId]
+    fun markCloudSyncStarted(appId: String, isUploading: Boolean) {
+        activeSyncs[appId] = if (isUploading) CloudSaveStatus.UPLOADING else CloudSaveStatus.DOWNLOADING
+    }
 
     /**
      * End a sync operation for a game
@@ -1204,7 +1204,6 @@ class GOGManager @Inject constructor(
      */
     fun endSync(appId: String) {
         activeSyncs.remove(appId)
-        activeCloudSyncPhases.remove(appId)
     }
 
     /**
