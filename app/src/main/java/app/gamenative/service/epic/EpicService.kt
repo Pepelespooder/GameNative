@@ -452,7 +452,7 @@ class EpicService : Service() {
                                 EpicCloudSavesManager.syncCloudSaves(
                                     context = context,
                                     appId = gameId,
-                                    preferredAction = "download",
+                                    preferredSave = SaveLocation.Remote,
                                 )
                             }
                         }
