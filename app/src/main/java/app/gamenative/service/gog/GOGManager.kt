@@ -1198,6 +1198,10 @@ class GOGManager @Inject constructor(
         activeSyncs[appId] = if (isUploading) CloudSaveStatus.UPLOADING else CloudSaveStatus.DOWNLOADING
     }
 
+    fun markCloudSyncFinished(appId: String) {
+        activeSyncs.remove(appId)
+    }
+
     /**
      * Load timestamps from disk
      */

@@ -2177,9 +2177,8 @@ class SteamService : Service(), IChallengeUrlChanged {
                 return@async PostSyncInfo(SyncResult.InProgress)
             }
 
+            var syncResult = PostSyncInfo(SyncResult.UnknownFail)
             try {
-                var syncResult = PostSyncInfo(SyncResult.UnknownFail)
-
                 val maxAttempts = 3
                 for (attempt in 1..maxAttempts) {
                     try {

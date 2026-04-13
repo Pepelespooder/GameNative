@@ -10,6 +10,7 @@ import app.gamenative.data.GOGCredentials
 import app.gamenative.data.GOGGame
 import app.gamenative.data.LaunchInfo
 import app.gamenative.data.LibraryItem
+import app.gamenative.enums.SaveLocation
 import app.gamenative.events.AndroidEvent
 import app.gamenative.PluviaApp
 import app.gamenative.ui.util.SnackbarManager
@@ -389,7 +390,7 @@ class GOGService : Service() {
                                 gameTitle = gameTitle,
                             )?.isNotEmpty() == true
                             if (supportsCloudSaves && !ContainerUtils.isLocalSavesOnly(context, appId)) {
-                                syncCloudSaves(context, appId, preferredAction = "download")
+                                syncCloudSaves(context, appId, preferredSave = SaveLocation.Remote)
                             }
                         }
                     }

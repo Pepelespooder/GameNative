@@ -948,6 +948,7 @@ class SteamAppScreen : BaseAppScreen() {
                 onClick = { showWorkshopScreen(libraryItem.appId) },
             ),
         )
+    }
 
     override fun getForceCloudSync(context: Context, libraryItem: LibraryItem): ((SaveLocation) -> Unit) = { saveLocation ->
         PostHog.capture(
