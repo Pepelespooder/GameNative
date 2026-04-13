@@ -143,9 +143,8 @@ class EpicDownloadManager @Inject constructor(
 
             val chunkDir = manifest.getChunkDir()
 
-            if (chunks.isEmpty()) {
-                return@withContext Result.failure(Exception("No chunk data in manifest"))
-            }
+            // chunks can be empty when every file is zero-chunk (e.g. empty
+            // config stubs); files.isEmpty() is the real error condition
             if (files.isEmpty()) {
                 val msg = if (selectedTags.isNotEmpty()) {
                     "No files found for the selected language. This game may not support this language."
