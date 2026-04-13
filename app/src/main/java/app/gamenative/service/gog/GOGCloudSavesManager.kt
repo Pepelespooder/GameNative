@@ -10,7 +10,6 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.OkHttpClient
 import org.json.JSONArray
-import org.json.JSONObject
 import timber.log.Timber
 import java.io.File
 import java.io.FileInputStream
@@ -18,7 +17,6 @@ import java.io.FileOutputStream
 import java.security.MessageDigest
 import java.time.Instant
 import java.time.format.DateTimeFormatter
-import java.util.zip.GZIPInputStream
 import java.util.zip.GZIPOutputStream
 import java.util.concurrent.TimeUnit
 
