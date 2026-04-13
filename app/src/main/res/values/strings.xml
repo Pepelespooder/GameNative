@@ -274,6 +274,8 @@
     <string name="screen_effects_toon_description">Adds dark outlines for a cel-shaded look.</string>
     <string name="screen_effects_fxaa">FXAA</string>
     <string name="screen_effects_fxaa_description">Smooths jagged edges with a light post-process anti-aliasing pass.</string>
+    <string name="screen_effects_vivid">Vivid</string>
+    <string name="screen_effects_vivid_description">Adds a bloom and contrast boost for a punchier image.</string>
     <string name="screen_effects_crt">CRT</string>
     <string name="screen_effects_crt_description">Adds scanlines and subtle chromatic aberration.</string>
     <string name="screen_effects_ntsc">NTSC</string>
@@ -904,6 +906,8 @@
     <string name="settings_interface_swap_face_buttons_subtitle">Swap A↔B and X↔Y button icons</string>
     <string name="settings_interface_warn_before_exit_title">Warn before exiting</string>
     <string name="settings_interface_warn_before_exit_subtitle">Require double back press to exit — first press shows a warning</string>
+    <string name="settings_interface_show_gamepad_hints_title">Show controller hints</string>
+    <string name="settings_interface_show_gamepad_hints_subtitle">Show the controller button hints bar at the bottom of the screen</string>
     <string name="settings_interface_icon_style">Icon style</string>
     <string name="settings_interface_wifi_only_title">Download only over Wi-Fi/LAN</string>
     <string name="settings_interface_wifi_only_subtitle">Prevent downloads on cellular data</string>
@@ -1021,9 +1025,11 @@
     <string name="library_export_cancelled">Export cancelled</string>
     <string name="library_shortcut_created">Shortcut created</string>
     <string name="library_failed_to_create_shortcut">Failed to create shortcut: %s</string>
+    <string name="library_cloud_sync_starting">Starting cloud save sync…</string>
     <string name="library_cloud_sync_success">Cloud sync completed successfully</string>
     <string name="library_cloud_sync_up_to_date">Save files are already up to date</string>
-    <string name="library_cloud_sync_failed">Cloud sync failed: %s</string>
+    <string name="library_cloud_sync_failed">Cloud sync failed</string>
+    <string name="library_cloud_sync_error">Cloud sync error: %1$s</string>
 
     <!-- LibraryAppScreen: UI Labels -->
     <string name="library_need_internet">Need internet to install</string>

@@ -38,7 +38,7 @@ import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuAnchorType
-import androidx.compose.material3.OutlinedTextField
+import app.gamenative.ui.component.NoExtractOutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
@@ -1104,7 +1104,9 @@ class SteamAppScreen : BaseAppScreen() {
             }
             try {
                 val info = withContext(Dispatchers.IO) {
-                    val depots = SteamService.getDownloadableDepots(gameId)
+                    val container = ContainerManager(context).getContainerById("STEAM_$gameId")
+                    val language = container?.language ?: PrefManager.containerLanguage
+                    val depots = SteamService.getDownloadableDepots(gameId, language)
                     Timber.i("There are ${depots.size} depots belonging to ${libraryItem.appId}")
                     val branch = SteamService.getInstalledApp(gameId)?.branch ?: "public"
                     val availableBytes = StorageUtils.getAvailableSpace(SteamService.defaultStoragePath)
@@ -1202,6 +1204,7 @@ class SteamAppScreen : BaseAppScreen() {
                         SteamService.workshopPausedApps.remove(gameId)
                         CoroutineScope(Dispatchers.IO).launch {
                             SteamService.deleteApp(gameId)
+                            DownloadService.invalidateCache()
                             PluviaApp.events.emit(AndroidEvent.LibraryInstallStatusChanged(gameId))
                             withContext(Dispatchers.Main) {
                                 hideInstallDialog(gameId)
@@ -1325,6 +1328,7 @@ class SteamAppScreen : BaseAppScreen() {
 
                             CoroutineScope(Dispatchers.IO).launch {
                                 val success = SteamService.deleteApp(gameId)
+                                DownloadService.invalidateCache()
                                 withContext(Dispatchers.Main) {
                                     ContainerUtils.deleteContainer(context, libraryItem.appId)
                                 }
@@ -1566,7 +1570,7 @@ private fun SteamChangeBranchDialog(
                     expanded = branchExpanded,
                     onExpandedChange = { branchExpanded = it },
                 ) {
-                    OutlinedTextField(
+                    NoExtractOutlinedTextField(
                         value = selectedBranch,
                         onValueChange = {},
                         readOnly = true,
@@ -1594,7 +1598,7 @@ private fun SteamChangeBranchDialog(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                OutlinedTextField(
+                NoExtractOutlinedTextField(
                     value = privateBranchPassword,
                     onValueChange = {
                         privateBranchPassword = it

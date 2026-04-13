@@ -23,6 +23,7 @@ import app.gamenative.R
 import app.gamenative.data.EpicGame
 import app.gamenative.data.LibraryItem
 import app.gamenative.events.AndroidEvent
+import app.gamenative.service.DownloadService
 import app.gamenative.service.epic.EpicCloudSavesManager
 import app.gamenative.service.epic.EpicConstants
 import app.gamenative.service.epic.EpicService
@@ -539,6 +540,7 @@ class EpicAppScreen : BaseAppScreen() {
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 val result = EpicService.deleteGame(context, libraryItem.gameId)
+                DownloadService.invalidateCache()
 
                 if (result.isSuccess) {
                     Timber.tag(TAG).i("Epic game uninstalled successfully: ${libraryItem.appId}")
@@ -613,12 +615,47 @@ class EpicAppScreen : BaseAppScreen() {
 
     override fun getForceCloudSync(context: Context, libraryItem: LibraryItem): ((SaveLocation) -> Unit)? {
         val epicGame = EpicService.getEpicGameOf(libraryItem.gameId)
-        if (epicGame?.cloudSaveEnabled != true) return null
-        return { saveLocation ->
-            CoroutineScope(Dispatchers.IO).launch {
-                EpicCloudSavesManager.launchForceSync(context, libraryItem.gameId, saveLocation)
-            }
+        if (epicGame?.cloudSaveEnabled == true) {
+            options.add(
+                AppMenuOption(
+                    optionType = AppOptionMenuType.ForceCloudSync,
+                    onClick = {
+                        val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+                        scope.launch {
+                            try {
+                                SnackbarManager.show(context.getString(R.string.library_cloud_sync_starting))
+
+                                val result = withContext(Dispatchers.IO) {
+                                    EpicCloudSavesManager.syncCloudSaves(
+                                        context,
+                                        libraryItem.gameId,
+                                        preferredAction = "download", // Force download for testing
+                                    )
+                                }
+
+                                SnackbarManager.show(
+                                    if (result) {
+                                        context.getString(R.string.library_cloud_sync_success)
+                                    } else {
+                                        context.getString(R.string.library_cloud_sync_failed)
+                                    },
+                                )
+                            } catch (e: Exception) {
+                                Timber.tag(TAG).e(e, "[Cloud Saves] Sync failed")
+                                SnackbarManager.show(
+                                    context.getString(
+                                        R.string.library_cloud_sync_error,
+                                        e.message ?: "",
+                                    ),
+                                )
+                            }
+                        }
+                    },
+                ),
+            )
         }
+
+        return options
     }
 
     /**
@@ -809,6 +846,7 @@ class EpicAppScreen : BaseAppScreen() {
                             downloadInfo?.awaitCompletion()
                             EpicService.cleanupDownload(context, gameId)
                             EpicService.deleteGame(context, gameId)
+                            DownloadService.invalidateCache()
                             withContext(Dispatchers.Main) {
                                 BaseAppScreen.hideInstallDialog(appId)
                                 app.gamenative.PluviaApp.events.emit(app.gamenative.events.AndroidEvent.DownloadStatusChanged(gameId, false))
