@@ -931,18 +931,26 @@ object SteamUtils {
                 try {
                     Files.createDirectories(targetFile.parent)
 
-                    // As Files.move use linux rename syscall (or simply mv command we know, no need to manually remove the target file)
-                    Files.move(
-                        file.toPath(),
-                        targetFile,
-                        StandardCopyOption.REPLACE_EXISTING,
-                        StandardCopyOption.COPY_ATTRIBUTES, // Preserve file attributes like timestamp and permission
-                        StandardCopyOption.ATOMIC_MOVE   // will throw if the FS can’t guarantee atomicity
-                    )
+                    // Android's Unix provider does not support COPY_ATTRIBUTES for move().
+                    // Try an atomic replace first, then fall back to a regular replace.
+                    try {
+                        Files.move(
+                            file.toPath(),
+                            targetFile,
+                            StandardCopyOption.REPLACE_EXISTING,
+                            StandardCopyOption.ATOMIC_MOVE,
+                        )
+                    } catch (_: IOException) {
+                        Files.move(
+                            file.toPath(),
+                            targetFile,
+                            StandardCopyOption.REPLACE_EXISTING,
+                        )
+                    }
 
                     Timber.tag("migrateGSESavesToSteamUserdata").i("Migrated ${file.name} from GSE saves to Steam userdata")
                     migratedCount++
-                } catch (e: IOException) {
+                } catch (e: Exception) {
                     migrationFailed = true
                     Timber.tag("migrateGSESavesToSteamUserdata").w(e, "Failed to migrate ${file.name}")
                 }
