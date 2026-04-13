@@ -2,6 +2,7 @@ package app.gamenative.ui.screen.library.appscreen
 
 import android.content.Context
 import app.gamenative.R
+import app.gamenative.enums.SaveLocation
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -17,21 +18,21 @@ class GOGAppScreenTest {
         val context = mockContext()
         val messages = mutableListOf<String>()
         var calledAppId: String? = null
-        var calledPreferredAction: String? = null
+        var calledPreferredSave: SaveLocation? = null
 
         GOGAppScreen.forceCloudSync(
             context = context,
             appId = "app-123",
-            syncCloudSaves = { _, appId, preferredAction ->
+            syncCloudSaves = { _, appId, preferredSave ->
                 calledAppId = appId
-                calledPreferredAction = preferredAction
+                calledPreferredSave = preferredSave
                 true
             },
             showSnackbar = { messages += it },
         )
 
         assertEquals("app-123", calledAppId)
-        assertEquals("auto", calledPreferredAction)
+        assertEquals(SaveLocation.None, calledPreferredSave)
         assertEquals(listOf("starting", "success"), messages)
     }
 
