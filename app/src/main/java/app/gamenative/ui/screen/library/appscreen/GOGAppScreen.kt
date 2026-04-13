@@ -22,7 +22,6 @@ import app.gamenative.data.GOGGame
 import app.gamenative.data.LibraryItem
 import app.gamenative.enums.Marker
 import app.gamenative.service.DownloadService
-import app.gamenative.enums.Marker
 import app.gamenative.enums.SaveLocation
 import app.gamenative.events.AndroidEvent
 import app.gamenative.service.gog.GOGCloudSavesManager
@@ -97,11 +96,11 @@ class GOGAppScreen : BaseAppScreen() {
         internal suspend fun forceCloudSync(
             context: Context,
             appId: String,
-            syncCloudSaves: suspend (Context, String, String) -> Boolean = { syncContext, syncAppId, preferredAction ->
+            syncCloudSaves: suspend (Context, String, SaveLocation) -> Boolean = { syncContext, syncAppId, preferredSave ->
                 GOGService.syncCloudSaves(
                     context = syncContext,
                     appId = syncAppId,
-                    preferredAction = preferredAction,
+                    preferredSave = preferredSave,
                 )
             },
             showSnackbar: (String) -> Unit = SnackbarManager::show,
@@ -113,7 +112,7 @@ class GOGAppScreen : BaseAppScreen() {
                 showSnackbar(context.getString(R.string.library_cloud_sync_starting))
 
                 val result = withContext(Dispatchers.IO) {
-                    syncCloudSaves(context, appId, "auto")
+                    syncCloudSaves(context, appId, SaveLocation.None)
                 }
 
                 if (result) {

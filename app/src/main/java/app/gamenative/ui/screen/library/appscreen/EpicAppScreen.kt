@@ -615,47 +615,39 @@ class EpicAppScreen : BaseAppScreen() {
 
     override fun getForceCloudSync(context: Context, libraryItem: LibraryItem): ((SaveLocation) -> Unit)? {
         val epicGame = EpicService.getEpicGameOf(libraryItem.gameId)
-        if (epicGame?.cloudSaveEnabled == true) {
-            options.add(
-                AppMenuOption(
-                    optionType = AppOptionMenuType.ForceCloudSync,
-                    onClick = {
-                        val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
-                        scope.launch {
-                            try {
-                                SnackbarManager.show(context.getString(R.string.library_cloud_sync_starting))
-
-                                val result = withContext(Dispatchers.IO) {
-                                    EpicCloudSavesManager.syncCloudSaves(
-                                        context,
-                                        libraryItem.gameId,
-                                        preferredAction = "download", // Force download for testing
-                                    )
-                                }
-
-                                SnackbarManager.show(
-                                    if (result) {
-                                        context.getString(R.string.library_cloud_sync_success)
-                                    } else {
-                                        context.getString(R.string.library_cloud_sync_failed)
-                                    },
-                                )
-                            } catch (e: Exception) {
-                                Timber.tag(TAG).e(e, "[Cloud Saves] Sync failed")
-                                SnackbarManager.show(
-                                    context.getString(
-                                        R.string.library_cloud_sync_error,
-                                        e.message ?: "",
-                                    ),
-                                )
-                            }
-                        }
-                    },
-                ),
-            )
+        if (epicGame?.cloudSaveEnabled != true) {
+            return null
         }
 
-        return options
+        return { saveLocation ->
+            kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
+                try {
+                    SnackbarManager.show(context.getString(R.string.library_cloud_sync_starting))
+
+                    val result = EpicCloudSavesManager.syncCloudSaves(
+                        context = context,
+                        appId = libraryItem.gameId,
+                        preferredSave = saveLocation,
+                    )
+
+                    SnackbarManager.show(
+                        if (result) {
+                            context.getString(R.string.library_cloud_sync_success)
+                        } else {
+                            context.getString(R.string.library_cloud_sync_failed)
+                        },
+                    )
+                } catch (e: Exception) {
+                    Timber.tag(TAG).e(e, "[Cloud Saves] Sync failed")
+                    SnackbarManager.show(
+                        context.getString(
+                            R.string.library_cloud_sync_error,
+                            e.message ?: "",
+                        ),
+                    )
+                }
+            }
+        }
     }
 
     /**
